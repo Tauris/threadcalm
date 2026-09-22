@@ -1,0 +1,323 @@
+/**
+ * Thread expansion.
+ *
+ * The original script's job, rebuilt around configurable limits, SPA-aware
+ * resets and a click target chosen by structure rather than by class name.
+ *
+ * Matching rules, in order of how much we trust them:
+ *
+ *  1. A reply counter recognised by *structure*: a native button whose own
+ *     label starts with a digit and which carries Engage's reply glyph. The
+ *     glyph is the same in every interface language, so this layer finds reply
+ *     counters in locales no label pack covers. The digit alone would not do —
+ *     share and reaction counters are numeric too, and the icon is what tells
+ *     them apart.
+ *  2. A bare reply counter read as text ("3 replies", "1 Antwort"). The
+ *     fallback for markup the glyph check does not cover. Anchored at both
+ *     ends, so it cannot collide with prose.
+ *  3. An explicit pagination label ("Show more replies"). Reply/comment
+ *     wording is required — a bare "Show more" is deliberately NOT accepted
+ *     here, because it also names unrelated controls.
+ *  4. A truncation control inside a post body ("See more"). Accepted only
+ *     within a recognised post container, which is what makes the bare label
+ *     safe.
+ *
+ * Anything that looks like a menu is rejected outright: opening the post
+ * overflow menu on every post in a feed was the worst early failure mode.
+ */
+import { bus, EVENTS } from '../core/bus.js';
+import {
+  accessibleTexts,
+  closestPost,
+  hasIconSignature,
+  isVisible,
+  nearestClickable,
+  normalizeText,
+  visibleText,
+} from '../core/dom.js';
+import { log } from '../core/logger.js';
+import * as settings from '../core/settings.js';
+import { isThreadView } from '../core/spa.js';
+
+/** Elements that could plausibly carry a label and receive a click. */
+const CANDIDATE_SELECTOR =
+  'button, [role="button"], a, [tabindex="0"], span, div[role="link"]';
+
+/** Labels longer than this are prose, not controls. */
+const MAX_LABEL_LENGTH = 120;
+
+/**
+ * Any decimal digit, in any numbering system.
+ *
+ * `\d` would be ASCII-only, and the point of this layer is to work in
+ * locales the label packs know nothing about.
+ */
+const LEADING_DIGIT = /^\p{Nd}/u;
+
+export function createExpander({ matchers }) {
+  let active = matchers;
+
+  let running = true;
+  let paused = false;
+  let scanTimer = null;
+  let settleTimer = null;
+  let heartbeat = null;
+
+  let totalClicks = 0;
+  let quietPasses = 0;
+  let limitReached = false;
+
+  // Element identity, not a selector, is what dedupes: Engage reuses labels
+  // freely but a given DOM node only ever needs to be opened once. A WeakSet
+  // also lets detached nodes be collected after a re-render.
+  let clicked = new WeakSet();
+
+  function publishState() {
+    bus.emit(EVENTS.EXPAND_STATE, {
+      enabled: settings.get('expand.enabled'),
+      paused,
+      totalClicks,
+      limitReached,
+    });
+  }
+
+  /** True when the script should be expanding on the current route. */
+  function inScope() {
+    if (!settings.get('expand.enabled') || paused) return false;
+    return settings.get('expand.scope') !== 'thread' || isThreadView();
+  }
+
+  function isMenuLike(element, texts) {
+    const popup = element.getAttribute('aria-haspopup');
+    if (popup === 'menu' || popup === 'true' || popup === 'dialog') return true;
+    if (element.getAttribute('aria-expanded') === 'true') return true;
+    return Boolean(active.menu && texts.some((text) => active.menu.test(text)));
+  }
+
+  /**
+   * A reply counter recognised without reading a word of it.
+   *
+   * A native button, not a menu, whose *own* label starts with a digit and
+   * which contains Engage's reply glyph. Restricting this to the button's own
+   * text matters: a post ancestor's text starts with all sorts of things.
+   */
+  function isStructuralReplyCount(element) {
+    if (element.tagName !== 'BUTTON') return false;
+
+    const label = normalizeText(visibleText(element));
+    if (!label || label.length > MAX_LABEL_LENGTH) return false;
+    if (!LEADING_DIGIT.test(label)) return false;
+
+    return hasIconSignature(element, settings.get('advanced.replyIconSignatures'));
+  }
+
+  /**
+   * Classifies a candidate element.
+   * @returns {'reply-count'|'pagination'|'truncation'|null}
+   */
+  function classify(element) {
+    if (!(element instanceof HTMLElement)) return null;
+    if (element.disabled || element.getAttribute('aria-disabled') === 'true') return null;
+
+    const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH);
+    if (isMenuLike(element, texts)) return null;
+
+    // Layer 1: structure, which holds in every interface language.
+    if (isStructuralReplyCount(element)) {
+      return isVisible(element) ? 'reply-count' : null;
+    }
+
+    if (texts.length === 0) return null;
+
+    // Layer 2 onwards: the label packs, for markup the glyph does not cover.
+    if (active.replyCount && texts.some((text) => active.replyCount.test(text))) {
+      return isVisible(element) ? 'reply-count' : null;
+    }
+    if (active.expandReplies && texts.some((text) => active.expandReplies.test(text))) {
+      return isVisible(element) ? 'pagination' : null;
+    }
+    if (
+      settings.get('expand.truncatedText') &&
+      active.expandText &&
+      texts.some((text) => active.expandText.test(text))
+    ) {
+      // A bare "See more" is only trustworthy inside a post.
+      if (!closestPost(element)) return null;
+      return isVisible(element) ? 'truncation' : null;
+    }
+    return null;
+  }
+
+  /**
+   * Finds everything worth clicking right now.
+   * Exposed for tests and for the "expand this thread" command.
+   */
+  function findControls(root = document) {
+    const found = [];
+    const seenTargets = new Set();
+
+    for (const element of root.querySelectorAll(CANDIDATE_SELECTOR)) {
+      const kind = classify(element);
+      if (!kind) continue;
+
+      const target = nearestClickable(element, closestPost(element));
+      if (!target || clicked.has(target) || seenTargets.has(target)) continue;
+
+      // A label span and its button both match; keep one entry per real target.
+      seenTargets.add(target);
+      found.push({ kind, element, target });
+    }
+    return found;
+  }
+
+  function clickBatch(root = document) {
+    const maxPerScan = settings.get('expand.maxClicksPerScan');
+    const maxTotal = settings.get('expand.maxTotalClicks');
+
+    if (totalClicks >= maxTotal) {
+      if (!limitReached) {
+        limitReached = true;
+        log.warn(`click limit reached (${maxTotal}); pausing expansion for this page`);
+        publishState();
+      }
+      return 0;
+    }
+
+    let clicks = 0;
+    for (const { kind, target } of findControls(root)) {
+      if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
+      clicked.add(target);
+      try {
+        target.click();
+      } catch (error) {
+        log.debug('click failed', error, target);
+        continue;
+      }
+      clicks += 1;
+      totalClicks += 1;
+      log.debug(`clicked ${kind}`, target);
+    }
+    return clicks;
+  }
+
+  function scan() {
+    scanTimer = null;
+    if (!running || !inScope()) return;
+
+    const clicks = clickBatch();
+    if (clicks > 0) {
+      quietPasses = 0;
+      bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(schedule, settings.get('expand.settleDelayMs'));
+    } else {
+      quietPasses += 1;
+      // Three consecutive empty passes is the signal that Engage has stopped
+      // rendering new controls, i.e. the visible thread is fully open.
+      if (quietPasses === 3) {
+        bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks: 0, settled: true });
+      }
+    }
+  }
+
+  function schedule() {
+    if (!running || scanTimer || !inScope()) return;
+    scanTimer = setTimeout(scan, settings.get('expand.scanDelayMs'));
+  }
+
+  function restartHeartbeat() {
+    clearInterval(heartbeat);
+    heartbeat = null;
+    const interval = settings.get('expand.heartbeatMs');
+    if (interval > 0) heartbeat = setInterval(schedule, interval);
+  }
+
+  /** Clears per-page counters. Called on navigation and on manual rescan. */
+  function reset() {
+    totalClicks = 0;
+    quietPasses = 0;
+    limitReached = false;
+    clicked = new WeakSet();
+    publishState();
+  }
+
+  return {
+    start() {
+      running = true;
+      restartHeartbeat();
+      schedule();
+      publishState();
+    },
+
+    stop() {
+      running = false;
+      clearTimeout(scanTimer);
+      clearTimeout(settleTimer);
+      clearInterval(heartbeat);
+      scanTimer = settleTimer = heartbeat = null;
+    },
+
+    /** Called by the SPA watcher; a new route means new counters. */
+    onNavigate() {
+      reset();
+      schedule();
+    },
+
+    onDomChanged() {
+      schedule();
+    },
+
+    onSettingsChanged(changed) {
+      if ('expand.heartbeatMs' in changed) restartHeartbeat();
+      if ('expand.maxTotalClicks' in changed) limitReached = false;
+      publishState();
+      schedule();
+    },
+
+    /** Re-reads label packs after the user edits languages or patterns. */
+    setMatchers(next) {
+      active = next;
+      schedule();
+    },
+
+    /** Forgets the click history and runs a fresh pass immediately. */
+    rescan() {
+      reset();
+      scan();
+    },
+
+    pause() {
+      paused = true;
+      clearTimeout(scanTimer);
+      clearTimeout(settleTimer);
+      scanTimer = settleTimer = null;
+      publishState();
+    },
+
+    resume() {
+      paused = false;
+      publishState();
+      schedule();
+    },
+
+    togglePause() {
+      if (paused) this.resume();
+      else this.pause();
+      return paused;
+    },
+
+    isPaused: () => paused,
+
+    /** Expands one subtree only — used by the "expand this post" shortcut. */
+    expandWithin(root) {
+      return clickBatch(root);
+    },
+
+    get stats() {
+      return { totalClicks, paused, limitReached };
+    },
+
+    // Exposed for the test suite.
+    _internals: { classify, findControls },
+  };
+}

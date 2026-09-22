@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest something Threadcalm should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the **Scope** section of [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) first.
+        A few things are deliberately out of scope: anything that sends post content anywhere,
+        API/token access, write actions against Engage, and bulk export tooling.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The reading problem, not the solution. What does Engage make tedious today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope-check
+    attributes:
+      label: Does this need anything to leave the browser?
+      description: Network requests of any kind are out of scope, including translation services.
+      options:
+        - 'No - everything happens in the page'
+        - 'Yes - it would need an external service'
+        - 'Not sure'
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Is this language-specific?
+      description: If it involves label matching, say which Engage UI language, and quote the labels.

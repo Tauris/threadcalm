@@ -1,0 +1,96 @@
+name: Bug report
+description: Something does not work, or the script clicked something it should not have
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report.
+
+        **Please do not paste real tenant markup, post content or colleagues' names.**
+        A description of the structure and the exact *label text* of the control involved is
+        almost always enough, and it keeps other people's posts out of a public repository.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before reporting
+      options:
+        - label: The problem does **not** happen with this script disabled
+          required: true
+        - label: I am on the latest version from `dist/`
+          required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a thread with about 20 replies
+        2. Wait for the panel to say "Thread expanded"
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: label-text
+    attributes:
+      label: Exact label text of the control involved
+      description: >
+        Copy it character for character, including the number, e.g. `3 weitere Antworten anzeigen`.
+        This is usually the whole bug. Leave blank if no particular control is involved.
+
+  - type: input
+    id: version
+    attributes:
+      label: Threadcalm version
+      description: Shown at the top of the settings sheet.
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: manager
+    attributes:
+      label: Userscript manager
+      options:
+        - Tampermonkey
+        - Violentmonkey
+        - Greasemonkey
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Edge 131 on Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: ui-language
+    attributes:
+      label: Viva Engage interface language
+      description: The language the Engage UI is displayed in, not the language posts are written in.
+      placeholder: German
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: >
+        Turn on *Verbose console logging* in the settings sheet, reload, and paste the
+        `[Threadcalm]` lines. Redact anything identifying.
+      render: text

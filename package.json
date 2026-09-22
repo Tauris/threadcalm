@@ -1,0 +1,45 @@
+{
+  "name": "threadcalm",
+  "version": "1.0.0",
+  "description": "A Tampermonkey userscript that makes Microsoft Viva Engage readable: auto-expands whole threads, copies them as Markdown, adds keyboard shortcuts, a reading mode and clutter removal.",
+  "type": "module",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "author": "Jörg Türmer",
+  "homepage": "https://github.com/Tauris/threadcalm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tauris/threadcalm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tauris/threadcalm/issues"
+  },
+  "keywords": [
+    "userscript",
+    "tampermonkey",
+    "viva-engage",
+    "yammer",
+    "microsoft-365"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint && npm run test && npm run build",
+    "verify:dist": "node scripts/build.mjs --check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.12.0",
+    "globals": "^15.11.0",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.3"
+  }
+}
