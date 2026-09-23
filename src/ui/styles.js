@@ -162,6 +162,34 @@ export const STYLES = `
   font-size: 16px;
 }
 
+/*
+ * The project name, in every window this script opens.
+ *
+ * It is a link rather than a label so that anyone wondering what put a panel
+ * on their Engage page can find out in one click. Styled to read as the title
+ * it already was -- underlined only on hover -- because turning a heading a
+ * different colour would make it look like a stray link rather than the name
+ * of the thing they are looking at.
+ */
+#tc-panel .tc-build .tc-brand,
+#tc-settings h2 .tc-brand,
+#tc-help .tc-eyebrow .tc-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+#tc-panel .tc-build .tc-brand:hover,
+#tc-settings h2 .tc-brand:hover,
+#tc-help .tc-eyebrow .tc-brand:hover { text-decoration: underline; }
+
+#tc-help .tc-eyebrow {
+  margin: 0 0 2px;
+  color: var(--tc-muted);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
 #tc-settings .tc-version {
   margin: 0 0 14px;
   color: var(--tc-muted);

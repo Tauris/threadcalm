@@ -27,6 +27,10 @@ the [README](../README.md).
 Bottom-right, once a feed loads. It reports how much has been expanded, and carries the pause
 control, a **Settings** button, a **?** button for the shortcut list, and **×** to hide it.
 
+Its top line names the script, the version and the build, and *Threadcalm* is a link to the
+project. Every window this script opens carries that link, so whatever appears on your page can
+always be traced back to what put it there in one click.
+
 Hiding it is not a one-way door: press <kbd>p</kbd> to bring it back, or use the userscript
 manager's menu → *Show the Threadcalm panel*. <kbd>s</kbd> opens settings whether the panel is
 visible or not.

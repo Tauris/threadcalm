@@ -13,7 +13,7 @@
 import { bus, EVENTS } from '../core/bus.js';
 import { el, isEditingContext, rootPosts } from '../core/dom.js';
 import { getValue, setValue } from '../core/gm.js';
-import { LINKS, PUBLIC_REPO } from '../meta.js';
+import { LINKS, PUBLIC_REPO, brandLink } from '../meta.js';
 import * as settings from '../core/settings.js';
 
 export const FOCUS_CLASS = 'tc-focus';
@@ -120,6 +120,7 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       el(
         'div',
         { className: 'tc-help-card' },
+        el('p', { className: 'tc-eyebrow' }, brandLink(el)),
         el('h2', { text: 'Keyboard shortcuts' }),
         el(
           'dl',

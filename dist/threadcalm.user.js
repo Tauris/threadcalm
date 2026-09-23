@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm
 // @namespace   https://github.com/Tauris/threadcalm
-// @version     1.0.2
+// @version     1.0.3
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm v1.0.2
+ * Threadcalm v1.0.3
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -1946,6 +1946,17 @@
     <path d="M17 24h10"/>
   </g>
 </svg>`;
+  function brandLink(el2, { className = "tc-brand" } = {}) {
+    if (!PUBLIC_REPO) return el2("span", { className, text: SCRIPT_NAME });
+    return el2("a", {
+      className,
+      href: REPOSITORY,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      text: SCRIPT_NAME,
+      title: "Threadcalm on GitHub"
+    });
+  }
   var MATCHES = [
     "https://engage.cloud.microsoft/*",
     "https://*.engage.cloud.microsoft/*",
@@ -2063,6 +2074,7 @@
         el(
           "div",
           { className: "tc-help-card" },
+          el("p", { className: "tc-eyebrow" }, brandLink(el)),
           el("h2", { text: "Keyboard shortcuts" }),
           el(
             "dl",
@@ -2334,11 +2346,14 @@
         { id: PANEL_ID, role: "status", "aria-live": "polite" },
         // Build stamp first, so "which version is this?" is answered before
         // anything else in the panel is read.
-        el("div", {
-          className: `tc-build${channel === "stable" ? "" : " tc-build-pre"}`,
-          text: buildLabel,
-          title: "Version, channel and build stamp"
-        }),
+        el(
+          "div",
+          { className: `tc-build${channel === "stable" ? "" : " tc-build-pre"}` },
+          // The panel appears on a page nobody asked it to appear on, so it
+          // says what it is and links to where it came from.
+          brandLink(el),
+          el("span", { text: ` ${buildLabel}`, title: "Version, channel and build stamp" })
+        ),
         el(
           "div",
           { className: "tc-row" },
@@ -2552,7 +2567,7 @@
       const body = el(
         "div",
         { className: "tc-sheet", role: "document" },
-        el("h2", { text: "Threadcalm" }),
+        el("h2", {}, brandLink(el)),
         el("p", { className: "tc-version", text: buildLabel })
       );
       for (const group of GROUPS) {
@@ -2807,6 +2822,34 @@
 #tc-settings h2 {
   margin: 0 0 2px;
   font-size: 16px;
+}
+
+/*
+ * The project name, in every window this script opens.
+ *
+ * It is a link rather than a label so that anyone wondering what put a panel
+ * on their Engage page can find out in one click. Styled to read as the title
+ * it already was -- underlined only on hover -- because turning a heading a
+ * different colour would make it look like a stray link rather than the name
+ * of the thing they are looking at.
+ */
+#tc-panel .tc-build .tc-brand,
+#tc-settings h2 .tc-brand,
+#tc-help .tc-eyebrow .tc-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+#tc-panel .tc-build .tc-brand:hover,
+#tc-settings h2 .tc-brand:hover,
+#tc-help .tc-eyebrow .tc-brand:hover { text-decoration: underline; }
+
+#tc-help .tc-eyebrow {
+  margin: 0 0 2px;
+  color: var(--tc-muted);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 #tc-settings .tc-version {
@@ -3486,9 +3529,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.2" : "0.0.0-dev";
+  var VERSION = true ? "1.0.3" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "2e659f3" : "dev";
+  var BUILD = true ? "5a1f494" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

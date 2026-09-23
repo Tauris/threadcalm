@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { el } from '../src/core/dom.js';
 import {
   CHANNELS,
   COPYRIGHT_HOLDER,
@@ -10,6 +11,7 @@ import {
   REPOSITORY,
   SCRIPT_NAME,
   metadata,
+  brandLink,
   metadataFor,
 } from '../src/meta.js';
 
@@ -82,6 +84,29 @@ describe('distribution channels', () => {
 
   it('rejects a channel that does not exist', () => {
     expect(() => metadataFor('nope')).toThrow(/unknown channel/i);
+  });
+});
+
+describe('the brand link', () => {
+  it('points at the repository', () => {
+    const node = brandLink(el);
+    expect(node.tagName).toBe('A');
+    expect(node.getAttribute('href')).toBe(REPOSITORY);
+    expect(node.textContent).toBe(SCRIPT_NAME);
+  });
+
+  it('opens safely in a new tab', () => {
+    // Anything this script points at Engage's page must not hand the opener
+    // over with it.
+    const node = brandLink(el);
+    expect(node.getAttribute('target')).toBe('_blank');
+    expect(node.getAttribute('rel')).toContain('noopener');
+  });
+
+  it('is shown in every window the script opens', () => {
+    // A panel appearing over someone's page with no way to find out what put
+    // it there is the kind of thing people are right to distrust.
+    expect(PUBLIC_REPO).toBe(true);
   });
 });
 

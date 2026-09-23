@@ -96,6 +96,32 @@ export const CHANNELS = {
 /** The default channel, and the one the README tells people to install. */
 export const DEFAULT_CHANNEL = 'stable';
 
+/**
+ * The script's name as a link back to the project, for use in its dialogs.
+ *
+ * Every window this script puts on someone else's page should say what it is
+ * and where it came from: a panel appearing over Engage with no way to find
+ * out what put it there is the kind of thing people are right to distrust.
+ *
+ * Returns plain text rather than a link when the repository is not public,
+ * for the same reason the other in-page links are gated: a dead link is worse
+ * than none. `el` is passed in rather than imported to keep this module free
+ * of DOM dependencies -- it is data everywhere else, including in the build.
+ *
+ * @param {Function} el the element helper from core/dom.js
+ */
+export function brandLink(el, { className = 'tc-brand' } = {}) {
+  if (!PUBLIC_REPO) return el('span', { className, text: SCRIPT_NAME });
+  return el('a', {
+    className,
+    href: REPOSITORY,
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    text: SCRIPT_NAME,
+    title: 'Threadcalm on GitHub',
+  });
+}
+
 /** Sites the script runs on. Also reused by the docs. */
 export const MATCHES = [
   'https://engage.cloud.microsoft/*',

@@ -12,7 +12,7 @@
  */
 import { bus, EVENTS } from '../core/bus.js';
 import { el } from '../core/dom.js';
-import { LINKS, PUBLIC_REPO } from '../meta.js';
+import { LINKS, PUBLIC_REPO, brandLink } from '../meta.js';
 import * as settings from '../core/settings.js';
 import { GROUPS } from '../core/settings.js';
 
@@ -48,11 +48,14 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
       { id: PANEL_ID, role: 'status', 'aria-live': 'polite' },
       // Build stamp first, so "which version is this?" is answered before
       // anything else in the panel is read.
-      el('div', {
-        className: `tc-build${channel === 'stable' ? '' : ' tc-build-pre'}`,
-        text: buildLabel,
-        title: 'Version, channel and build stamp',
-      }),
+      el(
+        'div',
+        { className: `tc-build${channel === 'stable' ? '' : ' tc-build-pre'}` },
+        // The panel appears on a page nobody asked it to appear on, so it
+        // says what it is and links to where it came from.
+        brandLink(el),
+        el('span', { text: ` ${buildLabel}`, title: 'Version, channel and build stamp' }),
+      ),
       el(
         'div',
         { className: 'tc-row' },
@@ -311,7 +314,7 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
     const body = el(
       'div',
       { className: 'tc-sheet', role: 'document' },
-      el('h2', { text: 'Threadcalm' }),
+      el('h2', {}, brandLink(el)),
       el('p', { className: 'tc-version', text: buildLabel }),
     );
 
