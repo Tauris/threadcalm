@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { ICON_SVG, COPYRIGHT_HOLDER, LINKS, PUBLIC_REPO, REPOSITORY, metadata } from '../src/meta.js';
+import {
+  CHANNELS,
+  COPYRIGHT_HOLDER,
+  DEFAULT_CHANNEL,
+  ICON_SVG,
+  LINKS,
+  PUBLIC_REPO,
+  REPOSITORY,
+  SCRIPT_NAME,
+  metadata,
+  metadataFor,
+} from '../src/meta.js';
 
 describe('project links', () => {
   it('all point at the repository over https', () => {
@@ -17,6 +28,60 @@ describe('project links', () => {
   it('agrees with the userscript metadata block', () => {
     expect(metadata.homepageURL).toBe(REPOSITORY);
     expect(metadata.supportURL).toBe(LINKS.issues);
+  });
+});
+
+describe('distribution channels', () => {
+  it('give every channel its own identity', () => {
+    // @name + @namespace is what a userscript manager treats as identity. If
+    // two channels shared a pair, installing the beta would silently replace
+    // the stable install instead of sitting beside it -- which is the whole
+    // point of having a channel.
+    const identities = Object.keys(CHANNELS).map((channel) => {
+      const meta = metadataFor(channel);
+      return `${meta.name}\u0000${meta.namespace}`;
+    });
+    expect(new Set(identities).size).toBe(identities.length);
+  });
+
+  it('point each channel at its own branch and file', () => {
+    for (const [channel, spec] of Object.entries(CHANNELS)) {
+      const meta = metadataFor(channel);
+      const expected = `${REPOSITORY}/raw/${spec.branch}/dist/${spec.file}`;
+      expect(meta.downloadURL, channel).toBe(expected);
+      expect(meta.updateURL, channel).toBe(expected);
+    }
+  });
+
+  it('keep a beta install on the beta branch', () => {
+    // A beta that updated from main would quietly migrate testers onto the
+    // stable build the first time main moved ahead.
+    const beta = metadataFor('beta');
+    expect(beta.updateURL).toContain('/raw/beta/');
+    expect(beta.updateURL).not.toContain('/raw/main/');
+  });
+
+  it('leave the stable channel exactly as the README describes it', () => {
+    const stable = metadataFor(DEFAULT_CHANNEL);
+    expect(stable.name).toBe(SCRIPT_NAME);
+    expect(stable.namespace).toBe(REPOSITORY);
+    expect(stable.downloadURL).toBe(metadata.downloadURL);
+  });
+
+  it('differ in nothing but identity and the two URLs', () => {
+    // Anything else diverging would mean the beta stopped being a faithful
+    // preview of what is about to ship.
+    const varying = new Set(['name', 'namespace', 'downloadURL', 'updateURL']);
+    const stable = metadataFor('stable');
+    const beta = metadataFor('beta');
+    for (const key of Object.keys(stable)) {
+      if (varying.has(key)) continue;
+      expect(beta[key], key).toEqual(stable[key]);
+    }
+  });
+
+  it('rejects a channel that does not exist', () => {
+    expect(() => metadataFor('nope')).toThrow(/unknown channel/i);
   });
 });
 

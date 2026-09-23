@@ -36,6 +36,16 @@ import { createToaster } from './ui/toast.js';
 /** Replaced at build time with the version from package.json. */
 const VERSION = typeof __TC_VERSION__ === 'string' ? __TC_VERSION__ : '0.0.0-dev';
 
+/**
+ * Which build this is, and from which channel.
+ *
+ * The stamp is a hash of the bundle, so it changes whenever the sources do.
+ * It exists to answer one question without ceremony: is the copy running in
+ * this tab the one I just built?
+ */
+const CHANNEL = typeof __TC_CHANNEL__ === 'string' ? __TC_CHANNEL__ : 'dev';
+const BUILD = typeof __TC_BUILD__ === 'string' ? __TC_BUILD__ : 'dev';
+
 /** Settings whose change requires the label matchers to be rebuilt. */
 const MATCHER_KEYS = [
   'general.languages',
@@ -60,7 +70,13 @@ function main() {
   const copyTools = createCopyTools({ expander });
   const toaster = createToaster();
 
-  const panel = createPanel({ expander, highlighter, version: VERSION });
+  const panel = createPanel({
+    expander,
+    highlighter,
+    version: VERSION,
+    channel: CHANNEL,
+    build: BUILD,
+  });
 
   const shortcuts = createShortcuts({ expander, copyTools, readingMode, panel });
 
@@ -99,7 +115,7 @@ function main() {
   startSpaWatcher();
   registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode });
 
-  log.info(`v${VERSION} ready on ${location.host}`);
+  log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
 
   // Detecting no posts at all is the signature of Engage having changed its
   // markup. Say so once, rather than letting half the features do nothing in

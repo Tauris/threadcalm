@@ -70,6 +70,37 @@ Write a module under `src/features/` exporting a factory that returns an object 
 `start`, `stop`, `onNavigate`, `onDomChanged`, `onSettingsChanged`, `setMatchers`, then add it to the
 `features` array in [`src/main.js`](src/main.js). `main.js` should not need to know what it does.
 
+## Testing a build before it ships
+
+`main` is what people install, so nothing lands there untested. The `beta` channel exists for
+that. It is built from the same sources as the stable one and differs in exactly two things: its
+identity, and the two URLs it updates from.
+
+That identity is the point. A userscript manager recognises a script by `@name` plus
+`@namespace`, so the beta build — *Threadcalm (beta)*, namespace `…#beta` — installs **beside**
+your stable copy instead of replacing it. Enable whichever you want to exercise; with both enabled
+every feature would apply twice.
+
+1. Work on a branch as usual. `npm run build` writes both artefacts; `npm run watch:beta` follows
+   the beta one while you iterate locally.
+2. Point the `beta` branch at what you want to test:
+
+   ```bash
+   git push --force origin HEAD:beta
+   ```
+
+   `beta` is a moving pointer at whatever is under test, not a line of history, so force-pushing
+   it is the expected way to use it.
+3. Install
+   [`dist/threadcalm.beta.user.js`](https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js)
+   from the beta branch, and disable the stable script while you test.
+4. Exercise it against a real tenant. The beta keeps updating from `beta`, so every later push is
+   picked up without reinstalling.
+5. When it holds up, merge the branch into `main` and release from there.
+
+Both artefacts are committed and `npm run check` verifies both, so a stale beta build fails CI
+exactly as a stale stable one does.
+
 ## Cutting a release
 
 1. Set the version in [package.json](package.json). The build injects it into the userscript

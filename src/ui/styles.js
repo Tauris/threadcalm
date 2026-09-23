@@ -63,6 +63,26 @@ export const STYLES = `
 
 #tc-panel[hidden] { display: none; }
 
+/*
+ * The build stamp. Quiet for a release, and unmistakable for anything else,
+ * because the question it answers only ever matters while testing.
+ */
+#tc-panel .tc-build {
+  margin: 0 0 4px;
+  color: var(--tc-muted);
+  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .02em;
+}
+
+#tc-panel .tc-build-pre {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--tc-unanswered);
+  color: #1f1f1f;
+  font-weight: 600;
+}
+
 #tc-panel .tc-row {
   display: flex;
   align-items: center;
@@ -186,6 +206,48 @@ export const STYLES = `
   margin: 2px 0 0;
   color: var(--tc-muted);
   font-size: 11px;
+}
+
+/*
+ * Trade-offs listed beside a choice that is a trade rather than a taste.
+ * Marked with + and - rather than colour alone, so the distinction survives
+ * both themes and a reader who cannot rely on hue.
+ */
+#tc-settings .tc-option-notes {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--tc-border);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+#tc-settings .tc-option-notes dt {
+  margin: 6px 0 1px;
+  font-weight: 600;
+  color: var(--tc-fg);
+}
+
+#tc-settings .tc-option-notes dt:first-child { margin-top: 0; }
+
+#tc-settings .tc-option-notes dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--tc-muted);
+}
+
+#tc-settings .tc-option-notes .tc-gain::before {
+  content: "+ ";
+  color: var(--tc-accent);
+  font-weight: 700;
+}
+
+#tc-settings .tc-option-notes .tc-cost::before {
+  content: "− ";
+  color: var(--tc-warn);
+  font-weight: 700;
 }
 
 #tc-settings .tc-choices {
@@ -428,6 +490,94 @@ html.tc-quiet-collapse .tc-quiet-post [data-testid="overflow-set"] {
   overflow: hidden;
 }
 
+/*
+ * The out-of-flow modes: cluster, cluster-focus and edge.
+ *
+ * All three win the row's space back for good -- the actions leave the layout
+ * when the page loads and never rejoin it, so nothing moves when you point at
+ * a post. What they differ in is how much of the post the actions cover while
+ * they show, and what summons them.
+ *
+ * "position: relative" needs !important because Engage sets position on these
+ * containers itself with more specific selectors than ours. Losing that
+ * contest anchors the actions to the viewport instead of the post, which looks
+ * like a bar across the whole window. This is the case the !important
+ * convention at the top of this file exists for.
+ *
+ * The ground is the CSS system colour rather than ours: these sit among
+ * Engage's own icons and have to match the page those were drawn for, not this
+ * script's panel palette.
+ */
+html.tc-quiet-cluster .tc-quiet-post,
+html.tc-quiet-cluster-focus .tc-quiet-post,
+html.tc-quiet-edge .tc-quiet-post { position: relative !important; }
+
+html.tc-quiet-cluster .tc-quiet-post [data-testid="overflow-set"],
+html.tc-quiet-cluster-focus .tc-quiet-post [data-testid="overflow-set"],
+html.tc-quiet-edge .tc-quiet-post [data-testid="overflow-set"] {
+  position: absolute;
+  bottom: 4px;
+  z-index: 4;
+  box-sizing: border-box;
+  margin: 0;
+  opacity: 0;
+  transition: opacity .12s ease;
+  background: Canvas;
+  border: 1px solid rgba(128, 128, 128, .35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+}
+
+/*
+ * The cluster hugs its own buttons in a corner, so it costs a corner of the
+ * post rather than a line of it: the body stays selectable while you point at
+ * it, which a full-width bar makes impossible.
+ */
+html.tc-quiet-cluster .tc-quiet-post [data-testid="overflow-set"],
+html.tc-quiet-cluster-focus .tc-quiet-post [data-testid="overflow-set"] {
+  right: 8px;
+  left: auto;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Hover or focus. */
+html.tc-quiet-cluster .tc-quiet-post:hover [data-testid="overflow-set"],
+html.tc-quiet-cluster .tc-quiet-post:focus-within [data-testid="overflow-set"],
+html.tc-quiet-cluster [data-testid="overflow-set"]:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Focus only: a mouse never summons it, so nothing is ever covered by one. */
+html.tc-quiet-cluster-focus .tc-quiet-post:focus-within [data-testid="overflow-set"],
+html.tc-quiet-cluster-focus [data-testid="overflow-set"]:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/*
+ * Edge keeps the familiar full-width bar, and pays for it: the strip has to
+ * accept the pointer even while invisible in order to be hoverable at all, so
+ * the last line of a post is harder to select, and a touch there can reach a
+ * button that cannot be seen. That trade is the setting's to make, not ours.
+ */
+html.tc-quiet-edge .tc-quiet-post [data-testid="overflow-set"] {
+  left: 0;
+  right: 0;
+  width: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  pointer-events: auto;
+}
+
+html.tc-quiet-edge .tc-quiet-post [data-testid="overflow-set"]:hover,
+html.tc-quiet-edge .tc-quiet-post [data-testid="overflow-set"]:focus-within {
+  opacity: 1;
+}
+
 html.tc-quiet-dim .tc-quiet-post:hover [data-testid="overflow-set"],
 html.tc-quiet-dim .tc-quiet-post:focus-within [data-testid="overflow-set"],
 html.tc-quiet-dim [data-testid="overflow-set"]:focus-within,
@@ -440,22 +590,35 @@ html.tc-quiet-collapse [data-testid="overflow-set"]:focus-within {
   overflow: visible;
 }
 
+
+
 /*
- * The inline composer. Collapsed to a thin strip rather than to nothing, so it
- * still reads as somewhere to click, and expanded by focus as well as hover.
+ * The inline composer's *opener* — the avatar-and-pill that summons an editor.
+ *
+ * Only the opener is hidden, and it stays hidden: an editor the reader has
+ * actually opened is never given this class, so Reply always produces a box
+ * that can be typed into. quiet.js decides which is which.
+ *
+ * The opener does not come back on hover. Pointing at a post to read it is not
+ * a request to write, and a composer springing open under the pointer moves
+ * everything below it — the distraction this setting exists to remove. Focus
+ * is different: it is deliberate, and a keyboard user has no other way in, so
+ * :focus-within still reveals it. This is never "display: none", which is what
+ * keeps the opener in the tab order for that to work.
  */
 html.tc-quiet-composer-on .tc-quiet-composer {
-  max-height: 1.6rem;
+  max-height: 0;
   overflow: hidden;
-  opacity: .5;
+  opacity: 0;
+  pointer-events: none;
   transition: max-height .14s ease, opacity .14s ease;
 }
 
-html.tc-quiet-composer-on .tc-quiet-composer:hover,
 html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
   max-height: 16rem;
   overflow: visible;
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* ------------------------------------------------------------ declutter -- */

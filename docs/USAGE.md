@@ -108,16 +108,62 @@ threshold if you would rather it guessed more freely.
 
 Furniture that repeats once per post. Both parts are **off by default** and switch independently.
 
-**The Like / Comment / Share bar** can fade or collapse until you hover or tab into a post:
+**The Like / Comment / Share bar** has six modes. They are all switchable at any time, and the
+default is *Always visible* — nothing is hidden until you ask for it.
 
-- **Fade** keeps the row's space and only makes it invisible. Nothing ever moves.
-- **Collapse** reclaims the row, at the cost of the post growing slightly as you point at it.
+Three things are being traded against one another, and no mode wins all three:
 
-**Inline "Write a comment" boxes** can collapse to a thin strip until clicked. In a long thread
-this saves more than the action bar does.
+| Mode | Wins the row back | Nothing moves | Covers nothing |
+|---|---|---|---|
+| **Always visible** | — | yes | yes |
+| **Fade out until hovered** | — | yes | yes |
+| **Collapse until hovered** | yes | — | yes |
+| **Corner cluster on hover** | yes | yes | — |
+| **Corner cluster, keyboard only** | yes | yes | yes* |
+| **Full-width bar at the bottom edge** | yes | yes | — |
 
-Neither uses `display: none`. The controls keep their place in the tab order, and reveal on
-keyboard focus exactly as they do on hover, so Like and Reply remain reachable without a mouse.
+\* Nothing is ever covered by a pointer, because a pointer never summons it.
+
+**Fade** only makes the row invisible. It is the safest choice: the page never moves and no text is
+ever covered, but the row keeps its space, so you win nothing back vertically.
+
+**Collapse** reclaims the row. The cost is that the post grows again every time the pointer crosses
+it, so a feed shifts under you while you read — which is exactly what some people cannot stand and
+others never notice.
+
+**Corner cluster** reclaims the row and never moves anything: the actions leave the layout when the
+page loads and come back, while you hover a post, as a small group in its bottom-right corner.
+Because it hugs its own buttons rather than spanning the column, it costs a corner instead of a
+line, so the body of the post stays selectable while you point at it. It takes its background from
+the page, so it matches whichever theme Engage is in.
+
+**Corner cluster, keyboard only** is the same thing that a mouse never summons at all. Reading is
+completely undisturbed — nothing appears, nothing is covered, ever. You reach the actions by
+tabbing into a post. The most aggressive reading mode, and the least discoverable, which is why it
+is not the default.
+
+**Full-width bar at the bottom edge** keeps the familiar bar and reclaims the row, but only shows
+it while the pointer is at the very bottom of a post. Reading the body never summons it. The price
+is that the strip has to accept the pointer even while invisible in order to be hoverable at all,
+which makes the last line of a post harder to select, and means a touch there can reach a button
+you cannot see.
+
+**Inline comment and reply boxes** can be hidden outright — both the thread's own
+"Write a comment" box and the "Write a reply" box under each comment. In a long thread this saves
+more than the action bar does.
+
+Only the *opener* is hidden: the avatar-and-pill that summons an editor. An editor you have
+actually opened is never hidden, so **Reply** in the action bar always gives you a box you can
+type into. That is how you write a reply with this setting on — the pill is redundant once the
+action bar is there.
+
+The opener does not come back on hover. Pointing at a post to read it is not a request to write,
+and a composer springing open under the pointer moves everything below it, which is the
+distraction the setting exists to remove. Keyboard focus is different: it is deliberate, and a
+keyboard user has no other route in, so tabbing to the opener still reveals it.
+
+Nothing here uses `display: none`. Every control keeps its place in the tab order, which is what
+lets focus reveal it at all, so Like, Reply and the composer all stay reachable without a mouse.
 
 ## Reading mode
 
@@ -230,7 +276,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Setting | Default |
 |---|---|
 | Like / Comment / Share bar | Always visible |
-| Collapse "Write a comment" boxes | off |
+| Hide inline comment and reply boxes | off |
 
 ### Reading
 

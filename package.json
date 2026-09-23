@@ -1,6 +1,6 @@
 {
   "name": "threadcalm",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Tampermonkey userscript that makes Microsoft Viva Engage readable: auto-expands whole threads, copies them as Markdown, adds keyboard shortcuts, a reading mode and clutter removal.",
   "type": "module",
   "private": true,
@@ -26,7 +26,9 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:beta": "node scripts/build.mjs --channel beta",
     "watch": "node scripts/build.mjs --watch",
+    "watch:beta": "node scripts/build.mjs --watch --channel beta",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",

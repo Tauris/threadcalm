@@ -66,6 +66,36 @@ export const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40
   </g>
 </svg>`;
 
+/**
+ * Distribution channels.
+ *
+ * A userscript manager identifies an installed script by `@name` plus
+ * `@namespace`, so giving the pre-release build its own pair is what lets it
+ * sit *beside* a stable install instead of silently replacing it. Enable
+ * whichever one you want to exercise; they are separate entries in the
+ * manager's list.
+ *
+ * Each channel tracks its own branch, so a beta install keeps updating from
+ * `beta` and never drifts onto `main`.
+ */
+export const CHANNELS = {
+  stable: {
+    branch: 'main',
+    file: 'threadcalm.user.js',
+    nameSuffix: '',
+    namespaceSuffix: '',
+  },
+  beta: {
+    branch: 'beta',
+    file: 'threadcalm.beta.user.js',
+    nameSuffix: ' (beta)',
+    namespaceSuffix: '#beta',
+  },
+};
+
+/** The default channel, and the one the README tells people to install. */
+export const DEFAULT_CHANNEL = 'stable';
+
 /** Sites the script runs on. Also reused by the docs. */
 export const MATCHES = [
   'https://engage.cloud.microsoft/*',
@@ -73,6 +103,26 @@ export const MATCHES = [
   'https://web.yammer.com/*',
   'https://www.yammer.com/*',
 ];
+
+/**
+ * The metadata block for one channel.
+ *
+ * Everything except identity and the two URLs is shared, so a channel can
+ * never drift from the stable build in anything that matters to behaviour.
+ */
+export function metadataFor(channel = DEFAULT_CHANNEL) {
+  const spec = CHANNELS[channel];
+  if (!spec) throw new Error(`unknown channel: ${channel}`);
+
+  const url = `${REPOSITORY}/raw/${spec.branch}/dist/${spec.file}`;
+  return {
+    ...metadata,
+    name: `${SCRIPT_NAME}${spec.nameSuffix}`,
+    namespace: `${REPOSITORY}${spec.namespaceSuffix}`,
+    downloadURL: url,
+    updateURL: url,
+  };
+}
 
 export const metadata = {
   name: SCRIPT_NAME,

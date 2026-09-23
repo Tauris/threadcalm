@@ -19,7 +19,12 @@ import { GROUPS } from '../core/settings.js';
 const PANEL_ID = 'tc-panel';
 const SETTINGS_ID = 'tc-settings';
 
-export function createPanel({ expander, highlighter, version }) {
+export function createPanel({ expander, highlighter, version, channel = 'dev', build: stamp = 'dev' }) {
+  // Shown in the panel and in the settings sheet. The stamp changes with
+  // every change to the sources, so it answers "am I running what I just
+  // built?" without opening a console.
+  const buildLabel = channel === 'stable' ? `v${version} · ${stamp}`
+    : `v${version} · ${channel} · ${stamp}`;
   let panel = null;
   let statusText = null;
   let pauseButton = null;
@@ -41,6 +46,13 @@ export function createPanel({ expander, highlighter, version }) {
     panel = el(
       'div',
       { id: PANEL_ID, role: 'status', 'aria-live': 'polite' },
+      // Build stamp first, so "which version is this?" is answered before
+      // anything else in the panel is read.
+      el('div', {
+        className: `tc-build${channel === 'stable' ? '' : ' tc-build-pre'}`,
+        text: buildLabel,
+        title: 'Version, channel and build stamp',
+      }),
       el(
         'div',
         { className: 'tc-row' },
@@ -186,11 +198,33 @@ export function createPanel({ expander, highlighter, version }) {
             }),
           );
         }
+        // Where a choice is a trade rather than a preference, the trade is
+        // spelled out beside it: picking well here means comparing options,
+        // not reading one line about the one already selected.
+        const notes = (definition.options ?? []).some(
+          (option) => option.gain || option.cost,
+        )
+          ? el(
+              'dl',
+              { className: 'tc-option-notes' },
+              ...(definition.options ?? []).flatMap((option) => [
+                el('dt', { text: option.label }),
+                el(
+                  'dd',
+                  {},
+                  option.gain ? el('span', { className: 'tc-gain', text: option.gain }) : null,
+                  option.cost ? el('span', { className: 'tc-cost', text: option.cost }) : null,
+                ),
+              ]),
+            )
+          : null;
+
         return el(
           'div',
           { className: 'tc-field' },
           el('label', {}, el('span', { text: definition.label }), select),
           help,
+          notes,
         );
       }
 
@@ -278,7 +312,7 @@ export function createPanel({ expander, highlighter, version }) {
       'div',
       { className: 'tc-sheet', role: 'document' },
       el('h2', { text: 'Threadcalm' }),
-      el('p', { className: 'tc-version', text: `Version ${version}` }),
+      el('p', { className: 'tc-version', text: buildLabel }),
     );
 
     for (const group of GROUPS) {

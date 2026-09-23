@@ -24,6 +24,8 @@ export default [
         GM_info: 'readonly',
         // Injected by the build.
         __TC_VERSION__: 'readonly',
+        __TC_CHANNEL__: 'readonly',
+        __TC_BUILD__: 'readonly',
       },
     },
     rules: {

@@ -40,7 +40,7 @@ export const GROUPS = [
  * @property {number} [min]
  * @property {number} [max]
  * @property {number} [step]
- * @property {Array<{value: string, label: string}>} [options]
+ * @property {Array<{value: string, label: string, gain?: string, cost?: string}>} [options]
  */
 
 const languageOptions = AVAILABLE_LANGUAGES.map((code) => ({
@@ -168,18 +168,53 @@ export const SCHEMA = [
     default: 'off',
     label: 'Like / Comment / Share bar',
     options: [
-      { value: 'off', label: 'Always visible' },
-      { value: 'dim', label: 'Fade out until hovered (keeps its space)' },
-      { value: 'collapse', label: 'Collapse until hovered (saves a row)' },
+      {
+        value: 'off',
+        label: 'Always visible',
+        gain: 'nothing is hidden, nothing to learn',
+        cost: 'a row of buttons under every post',
+      },
+      {
+        value: 'dim',
+        label: 'Fade out until hovered',
+        gain: 'nothing ever moves, nothing is ever covered',
+        cost: 'the row still takes its space',
+      },
+      {
+        value: 'collapse',
+        label: 'Collapse until hovered',
+        gain: 'wins the row back',
+        cost: 'the post grows as you point at it, shifting the page',
+      },
+      {
+        value: 'cluster',
+        label: 'Corner cluster on hover',
+        gain: 'wins the row back and nothing ever moves',
+        cost: 'covers a corner of the post while it shows',
+      },
+      {
+        value: 'cluster-focus',
+        label: 'Corner cluster, keyboard only',
+        gain: 'wins the row back; a mouse never summons it at all',
+        cost: 'reachable only by tabbing into the post',
+      },
+      {
+        value: 'edge',
+        label: 'Full-width bar at the bottom edge',
+        gain: 'wins the row back; the familiar bar, only when asked for',
+        cost: 'the last line is hard to select, and a touch can hit it unseen',
+      },
     ],
-    help: 'Revealed by hover and by keyboard focus, so the buttons stay reachable either way. "Collapse" wins back the most vertical space but makes the post grow slightly as you point at it.',
+    help: 'Every mode keeps the buttons reachable by keyboard. They trade three things against one another: whether the row\u2019s space is won back, whether anything moves as you point at a post, and how much of the post is covered while the actions show.',
   },
   {
     key: 'quiet.composer',
     type: 'boolean',
     default: false,
-    label: 'Collapse "Write a comment" boxes',
-    help: 'Each inline composer costs a row per post. Expands on click or focus.',
+    label: 'Hide inline comment and reply boxes',
+    help:
+      'Hides the "Write a comment" and "Write a reply" boxes. Hovering the post '
+      + 'or tabbing into the box brings it back.',
   },
 
   // -- Reading -------------------------------------------------------------

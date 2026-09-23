@@ -20,7 +20,13 @@
  * All of the work is CSS. This module only marks the containers, so the class
  * names the stylesheet keys off are ours rather than Engage's.
  */
-import { ACTION_ROW_SELECTOR, debounce, postContainerFor } from '../core/dom.js';
+import {
+  ACTION_ROW_SELECTOR,
+  accessibleTexts,
+  closestPost,
+  debounce,
+  postContainerFor,
+} from '../core/dom.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
 
@@ -34,7 +40,24 @@ export const COMPOSER_CLASS = 'tc-quiet-composer';
 export const MODE_CLASSES = {
   dim: 'tc-quiet-dim',
   collapse: 'tc-quiet-collapse',
+  cluster: 'tc-quiet-cluster',
+  clusterFocus: 'tc-quiet-cluster-focus',
+  edge: 'tc-quiet-edge',
   composer: 'tc-quiet-composer-on',
+};
+
+/**
+ * Which class each setting value puts on the document element.
+ *
+ * A map rather than a run of toggles: adding a mode and forgetting to toggle
+ * it is a silent failure, and it has already happened once.
+ */
+export const ACTION_MODE_CLASSES = {
+  dim: MODE_CLASSES.dim,
+  collapse: MODE_CLASSES.collapse,
+  cluster: MODE_CLASSES.cluster,
+  'cluster-focus': MODE_CLASSES.clusterFocus,
+  edge: MODE_CLASSES.edge,
 };
 
 /**
@@ -51,13 +74,74 @@ const COMPOSER_LABELS = [
   /^escribir un comentario$/i,
 ];
 
+/**
+ * The expanded editor: the box you actually type into.
+ *
+ * This must never be hidden. It only exists because the reader just asked for
+ * it — by clicking Reply, or the opener below — so hiding it means Reply
+ * appears to do nothing at all.
+ */
+const EDITOR_SELECTOR =
+  'textarea, input[type="text"], [role="textbox"], [contenteditable="true"]';
+
+/**
+ * The collapsed opener: the avatar-and-pill that *summons* the editor.
+ *
+ * Before activation Engage renders this as a plain `button` whose name is its
+ * own visible text — no `aria-label`, no `placeholder`. Missing it is why
+ * reply composers stayed visible while comment ones were tagged. This is the
+ * part that is clutter, and the only part that is hidden.
+ */
+const OPENER_SELECTOR = 'button, [role="button"]';
+
+const COMPOSER_SELECTOR = `${EDITOR_SELECTOR}, ${OPENER_SELECTOR}`;
+
+/**
+ * The wrapper that owns the composer's visible box.
+ *
+ * `[data-testid="focus-catcher-wrapper"]` is a real test id and holds the
+ * avatar, the pill and the drag-and-drop area — tagging the button's immediate
+ * parent would leave all three on screen.
+ */
+const COMPOSER_WRAPPER_SELECTOR =
+  'form, [role="form"], [data-testid="focus-catcher-wrapper"]';
+
+/** Composer labels are short; anything longer is prose that mentions them. */
+const MAX_LABEL_LENGTH = 40;
+
+/** How far to climb past the wrapper looking for padding that belongs to it. */
+const MAX_LONE_ANCESTORS = 2;
+
+/**
+ * Ancestors that exist only to hold this wrapper.
+ *
+ * Collapsing the wrapper is not enough to win the row back: Engage puts the
+ * composer inside padded blocks of its own, and that padding survives whatever
+ * happens to the child. A parent with no other element children is therefore
+ * treated as part of the composer. The "no other children" test is what keeps
+ * it safe — a block shared with anything else is left alone.
+ */
+function loneAncestors(element) {
+  const found = [];
+  let node = element;
+  for (let depth = 0; depth < MAX_LONE_ANCESTORS; depth += 1) {
+    const parent = node.parentElement;
+    if (!parent || parent === document.body || parent === document.documentElement) break;
+    if (parent.children.length !== 1) break;
+    found.push(parent);
+    node = parent;
+  }
+  return found;
+}
+
 export function createQuietChrome() {
   function applyModes() {
     const root = document.documentElement;
     const mode = settings.get('quiet.actions');
 
-    root.classList.toggle(MODE_CLASSES.dim, mode === 'dim');
-    root.classList.toggle(MODE_CLASSES.collapse, mode === 'collapse');
+    for (const [value, className] of Object.entries(ACTION_MODE_CLASSES)) {
+      root.classList.toggle(className, mode === value);
+    }
     root.classList.toggle(MODE_CLASSES.composer, settings.get('quiet.composer'));
   }
 
@@ -75,20 +159,49 @@ export function createQuietChrome() {
 
     let composers = 0;
     if (settings.get('quiet.composer')) {
-      for (const element of root.querySelectorAll('textarea, input[type="text"], [role="textbox"], [contenteditable="true"]')) {
-        const label =
-          element.getAttribute('aria-label') ??
-          element.getAttribute('placeholder') ??
-          '';
-        if (!COMPOSER_LABELS.some((pattern) => pattern.test(label.trim()))) continue;
+      // A wrapper can hold the opener now and the editor a moment later, so
+      // decide per wrapper rather than per element: one editor inside is
+      // enough to make the whole wrapper off-limits.
+      const wrappers = new Map();
+
+      for (const element of root.querySelectorAll(COMPOSER_SELECTOR)) {
+        // accessibleTexts() covers visible descendant text as well as the
+        // naming attributes, which is what finds the collapsed reply button.
+        const names = accessibleTexts(element).filter(
+          (text) => text.length <= MAX_LABEL_LENGTH,
+        );
+        if (!names.some((name) => COMPOSER_LABELS.some((pattern) => pattern.test(name)))) {
+          continue;
+        }
 
         // Tag the wrapper rather than the field: collapsing the field itself
         // would fight whatever sizing Engage applies to it while typing.
-        const wrapper = element.closest('form, [role="form"]') ?? element.parentElement;
-        if (wrapper && !wrapper.classList.contains(COMPOSER_CLASS)) {
-          wrapper.classList.add(COMPOSER_CLASS);
-          composers += 1;
+        const wrapper = element.closest(COMPOSER_WRAPPER_SELECTOR) ?? element.parentElement;
+        if (!wrapper) continue;
+
+        const entry = wrappers.get(wrapper) ?? { hasEditor: false };
+        entry.hasEditor = entry.hasEditor || element.matches(EDITOR_SELECTOR);
+        wrappers.set(wrapper, entry);
+      }
+
+      for (const [wrapper, { hasEditor }] of wrappers) {
+        const targets = [wrapper, ...loneAncestors(wrapper)];
+
+        if (hasEditor) {
+          // The reader opened this one. Un-tag it, including a wrapper tagged
+          // on an earlier pass while it still held nothing but the opener.
+          for (const target of targets) target.classList.remove(COMPOSER_CLASS);
+          continue;
         }
+
+        if (wrapper.classList.contains(COMPOSER_CLASS)) continue;
+        for (const target of targets) target.classList.add(COMPOSER_CLASS);
+        composers += 1;
+
+        // The opener keeps its place in the tab order, so focus can still
+        // reach it; the post around it is tagged so the CSS has that anchor.
+        const post = closestPost(wrapper);
+        if (post) post.classList.add(POST_CLASS);
       }
     }
 

@@ -48,7 +48,14 @@ jobs:
       - name: Verify the committed bundle is current
         run: npm run verify:dist
 
-      - name: Confirm the bundle is installable
+      - name: Confirm both bundles are installable
         run: |
-          head -1 dist/threadcalm.user.js | grep -q '==UserScript=='
-          grep -q 'NOT AFFILIATED WITH MICROSOFT' dist/threadcalm.user.js
+          for f in dist/threadcalm.user.js dist/threadcalm.beta.user.js; do
+            head -1 "$f" | grep -q '==UserScript=='
+            grep -q 'NOT AFFILIATED WITH MICROSOFT' "$f"
+          done
+          # Each channel must carry its own identity: if the beta ever built
+          # with the stable name, installing it would replace the stable copy
+          # instead of sitting beside it.
+          grep -q '^// @name  *Threadcalm$' dist/threadcalm.user.js
+          grep -q '^// @name  *Threadcalm (beta)$' dist/threadcalm.beta.user.js

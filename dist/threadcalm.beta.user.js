@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name        Threadcalm
-// @namespace   https://github.com/Tauris/threadcalm
+// @name        Threadcalm (beta)
+// @namespace   https://github.com/Tauris/threadcalm#beta
 // @version     1.0.1
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
@@ -8,8 +8,8 @@
 // @license     BSD-3-Clause
 // @homepageURL https://github.com/Tauris/threadcalm
 // @supportURL  https://github.com/Tauris/threadcalm/issues
-// @downloadURL https://github.com/Tauris/threadcalm/raw/main/dist/threadcalm.user.js
-// @updateURL   https://github.com/Tauris/threadcalm/raw/main/dist/threadcalm.user.js
+// @downloadURL https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js
+// @updateURL   https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js
 // @match       https://engage.cloud.microsoft/*
 // @match       https://*.engage.cloud.microsoft/*
 // @match       https://web.yammer.com/*
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm v1.0.1
+ * Threadcalm (beta) v1.0.1
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -3302,8 +3302,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
 
   // src/main.js
   var VERSION = true ? "1.0.1" : "0.0.0-dev";
-  var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "20bfc6d" : "dev";
+  var CHANNEL = true ? "beta" : "dev";
+  var BUILD = true ? "c22a365" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

@@ -134,7 +134,12 @@ export function createShortcuts({ expander, copyTools, readingMode, panel }) {
           el('span', {
             text:
               'Shortcuts are ignored while you are typing. '
-              + 'Press ? or use the panel’s ? button to see this again. ',
+              + 'Press ? or use the panel’s ? button to see this again. '
+              // Nothing is hidden by default, which means nobody finds these
+              // unless they are told. This is the one screen everybody sees.
+              + 'Settings also holds display options — the Like / Comment / Share bar '
+              + 'and the inline reply boxes can each be quieted, and every choice is '
+              + 'listed there with what it costs. ',
           }),
           // This overlay lists keys only; everything else lives in the guide.
           PUBLIC_REPO

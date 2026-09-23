@@ -25,7 +25,7 @@ that is reading. Threadcalm does the clicking.
 | **Copy as Markdown** | Copies a thread, replies nested as blockquotes, with authors, timestamps and a permalink. Plain text too. |
 | **Keyboard shortcuts** | `j`/`k` to move between posts, `c` to copy, `o` to expand, `?` for the list. |
 | **Reading mode** | Narrows the column, hides the side rails, tightens the spacing. |
-| **Quiet post chrome** | Fades or collapses the Like / Comment / Share bar and the inline comment boxes until you hover or tab into a post. |
+| **Quiet post chrome** | Optionally quiets the Like / Comment / Share bar and the inline comment and reply pills. Six modes for the bar, each trading space against movement against how much of the post is covered. Off by default. |
 | **Clutter removal** | Hides cards labelled sponsored, promoted or suggested. |
 | **Highlighting** | Marks posts with no replies, and posts you have not seen before. |
 | **Any interface language** | Reply counters are found by structure — a button carrying Engage's reply glyph — not by their wording, so thread expansion works whatever language your tenant renders. The controls that are still matched by text ship label packs for English, German, French, Spanish, Dutch and Italian, plus your own patterns. |
@@ -123,14 +123,14 @@ Every option is in the panel's settings sheet, grouped by feature, and stored lo
 | Where to expand | Feed and single threads | Restrict to single threads to keep the main feed short. |
 | Max clicks per page visit | 1500 | Safety limit against runaway clicking. Resets on navigation. |
 | Settle delay | 800 ms | How long to let Engage re-render between passes. Raise it on a slow tenant. |
-| Like / Comment / Share bar | Always visible | *Fade* keeps the row's space; *collapse* reclaims it but makes posts grow slightly on hover. |
-| Collapse "Write a comment" boxes | off | One row back per post. |
+| Like / Comment / Share bar | Always visible | Six modes, from *fade* to a corner cluster to keyboard-only. The settings sheet lists what each one gains and costs. |
+| Hide inline comment and reply boxes | off | Hides the pill that opens a composer. Reply still opens an editor, which is never hidden. |
 | Interface languages to recognise | English, German | Only affects the text-matched controls; reply counters are found without it. |
 | Extra patterns | empty | Your own regular expressions, one per line, if your tenant words things differently. |
 
 ## Troubleshooting
 
-**Nothing happens.** Open the console and look for `[Threadcalm] v1.0.0 ready`. If it is
+**Nothing happens.** Open the console and look for `[Threadcalm] v… ready`. If it is
 absent the script was not injected: check that Tampermonkey itself is enabled (a disabled
 *extension* looks exactly like a broken script), that this script's switch is on, and that the
 extension may read data on `engage.cloud.microsoft`.
