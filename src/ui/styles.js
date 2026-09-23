@@ -11,6 +11,10 @@
  *     or utility styles (hiding, widths), never for our own widgets
  *   - colours come from custom properties with a dark-mode override, so the
  *     script follows the theme the reader already chose
+ *   - but those properties track prefers-color-scheme, which is the browser's
+ *     theme, not Engage's. Anything drawn *inside* a post must therefore use
+ *     the CSS system colours (Canvas, CanvasText) instead, or it will clash
+ *     whenever the two disagree. Our own floating surfaces keep the palette.
  */
 
 export const STYLES = `
@@ -621,6 +625,26 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
   pointer-events: auto;
 }
 
+/*
+ * The "a" key: action bars suppressed outright.
+ *
+ * Last in this section and marked !important because it has to beat every
+ * reveal rule above it, including the :hover and :focus-within ones that are
+ * more specific than it is.
+ *
+ * This is the one place the script uses "visibility: hidden" on a control,
+ * which the rest of the file is careful never to do. The reason it is safe
+ * here is that it is not a default: somebody asked for it with a keypress,
+ * the same keypress undoes it, and the shortcut list says so. Leaving the
+ * buttons focusable but invisible would be worse -- tabbing would land on
+ * controls nobody can see.
+ */
+html.tc-quiet-hidden .tc-quiet-post [data-testid="overflow-set"] {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* ------------------------------------------------------------ declutter -- */
 
 .tc-decluttered { display: none !important; }
@@ -659,6 +683,14 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
 
 .tc-post { position: relative; }
 
+/*
+ * The copy chip, in whichever corner is free.
+ *
+ * Engage uses the corners of a post itself -- reactions in one, the action bar
+ * along the bottom -- and which one is clear depends on the tenant and the
+ * layout, so the corner is a setting rather than a decision made here. The
+ * default stays top-right; the class on <html> moves it.
+ */
 .tc-chip {
   position: absolute;
   top: 4px;
@@ -670,15 +702,59 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
   transition: opacity .12s ease;
 }
 
-.tc-post:hover .tc-chip,
-.tc-chip:focus-within { opacity: 1; }
+html.tc-chip-top-left .tc-chip {
+  top: 4px;
+  bottom: auto;
+  left: 4px;
+  right: auto;
+}
 
+html.tc-chip-bottom-left .tc-chip {
+  top: auto;
+  bottom: 4px;
+  left: 4px;
+  right: auto;
+}
+
+html.tc-chip-bottom-right .tc-chip {
+  top: auto;
+  bottom: 4px;
+  left: auto;
+  right: 4px;
+}
+
+/*
+ * What summons the chip. Focus always does -- it is the only way a keyboard
+ * reaches these buttons at all -- while the pointer does so only in "hover"
+ * mode, so a reader who finds them distracting can have them appear for the
+ * keyboard alone.
+ */
+.tc-chip:focus-within { opacity: 1; }
+html.tc-chip-hover .tc-post:hover .tc-chip { opacity: 1; }
+html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
+
+/*
+ * The copy chip is drawn inside a post, so it has to match the page rather
+ * than the operating system.
+ *
+ * --tc-bg and its neighbours come from prefers-color-scheme, which is the
+ * browser's idea of light or dark. Engage has its own theme setting, and the
+ * two disagree often: a dark OS with Engage in light mode turned this chip
+ * into a black rectangle on a white post. Canvas and CanvasText resolve
+ * against the colour scheme in force where the element is actually drawn, so
+ * they follow Engage.
+ *
+ * The rule that falls out, and that the action cluster above follows too:
+ * anything this script draws *inside* Engage's content uses system colours;
+ * the panel, the settings sheet and the toasts are our own floating surfaces
+ * and keep our palette.
+ */
 .tc-chip button {
   padding: 1px 6px;
-  border: 1px solid var(--tc-border);
+  border: 1px solid rgba(128, 128, 128, .4);
   border-radius: 4px;
-  background: var(--tc-bg);
-  color: var(--tc-muted);
+  background: Canvas;
+  color: CanvasText;
   font: 10px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   letter-spacing: .02em;
   cursor: pointer;

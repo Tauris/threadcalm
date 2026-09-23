@@ -190,6 +190,68 @@ describe('composer detection', () => {
   });
 });
 
+describe('hiding the bars outright', () => {
+  it('hides them, then hands them back to the chosen mode', () => {
+    settings.update({ 'quiet.actions': 'cluster' });
+    const feature = quiet();
+    const root = document.documentElement;
+    expect(root.classList.contains(MODE_CLASSES.hidden)).toBe(false);
+
+    expect(feature.toggleActions()).toBe('hidden');
+    expect(root.classList.contains(MODE_CLASSES.hidden)).toBe(true);
+
+    expect(feature.toggleActions()).toBe('shown');
+    expect(root.classList.contains(MODE_CLASSES.hidden)).toBe(false);
+  });
+
+  it.each(['dim', 'collapse', 'cluster', 'cluster-focus', 'edge'])(
+    'leaves the %s mode in place underneath',
+    (mode) => {
+      // Hiding is a layer over the mode, not a replacement for it, so showing
+      // again returns to exactly what was configured.
+      settings.update({ 'quiet.actions': mode });
+      const feature = quiet();
+      feature.toggleActions();
+
+      const root = document.documentElement;
+      expect(root.classList.contains(ACTION_MODE_CLASSES[mode]), mode).toBe(true);
+      expect(root.classList.contains(MODE_CLASSES.hidden), mode).toBe(true);
+    },
+  );
+
+  it('works even when the bars are set to always visible', () => {
+    // That is exactly when hiding them is worth having: otherwise they never
+    // go away at all.
+    settings.update({ 'quiet.actions': 'off' });
+    const feature = quiet();
+    expect(feature.toggleActions()).toBe('hidden');
+    expect(document.documentElement.classList.contains(MODE_CLASSES.hidden)).toBe(true);
+  });
+
+  it('gives way to an explicit choice of mode', () => {
+    settings.update({ 'quiet.actions': 'collapse' });
+    const feature = quiet();
+    feature.toggleActions();
+    expect(document.documentElement.classList.contains(MODE_CLASSES.hidden)).toBe(true);
+
+    settings.update({ 'quiet.actions': 'cluster' });
+    feature.onSettingsChanged({ 'quiet.actions': 'cluster' });
+
+    // Choosing a mode is deliberate, so it outranks the live override.
+    expect(document.documentElement.classList.contains(MODE_CLASSES.cluster)).toBe(true);
+    expect(document.documentElement.classList.contains(MODE_CLASSES.hidden)).toBe(false);
+  });
+
+  it('forgets the override on stop', () => {
+    settings.update({ 'quiet.actions': 'cluster' });
+    const feature = quiet();
+    feature.toggleActions();
+    feature.stop();
+    feature.start();
+    expect(document.documentElement.classList.contains(MODE_CLASSES.hidden)).toBe(false);
+  });
+});
+
 describe('the reveal path', () => {
   beforeEach(() => {
     settings.update({ 'quiet.composer': true });

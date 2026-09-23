@@ -78,7 +78,13 @@ function main() {
     build: BUILD,
   });
 
-  const shortcuts = createShortcuts({ expander, copyTools, readingMode, panel });
+  const shortcuts = createShortcuts({
+    expander,
+    copyTools,
+    readingMode,
+    panel,
+    quietChrome,
+  });
 
   const features = [
     expander,

@@ -5,6 +5,40 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-09-23
+
+### Added
+
+- **<kbd>a</kbd> hides the action bars outright, or shows them again.** Every mode reveals the bar
+  on something — a hover, a focus — and a control that appears and disappears is itself the
+  distraction. So this is a two-position switch across all of them: *hidden*, where nothing comes
+  up at all, and *shown*, where the configured mode applies exactly as chosen. It works in every
+  mode including *Always visible*, which is where hiding them is worth having most. A live switch
+  rather than a setting, so it lasts until the tab is reloaded and never rewrites the settings
+  sheet; choosing a mode returns it to *shown*, being the more explicit instruction of the two.
+  While hidden the buttons leave the tab order, rather than staying focusable but invisible.
+- **The copy buttons can be left to the keyboard.** They are this script's own invention — Engage
+  has nothing like them — and they exist only as a visible reminder that copying is possible, so
+  *Copy buttons on posts* now offers three answers rather than two: on hover, on keyboard focus
+  only, or never. <kbd>c</kbd> and <kbd>y</kbd> work identically in all three, so switching them
+  off loses no ability. A setting stored by 1.0.1, when this was a switch, is carried over rather
+  than reset.
+- **The copy buttons' corner is now a setting.** Engage draws its own controls in a post's corners
+  — reactions in one, the action bar along the bottom — and which corner is free differs between
+  tenants and layouts, so the chip was landing on the reactions. Four corners to choose from, each
+  listed with what it gains and costs; *bottom right* is flagged as colliding with the action
+  bar's corner cluster, if you use that.
+
+### Fixed
+
+- **The copy and link buttons were a black rectangle on a light page.** They took their colours
+  from `prefers-color-scheme`, which is the browser's theme, while Engage follows its own setting
+  — so a dark OS with Engage in light mode drew a dark chip inside a white post. Anything the
+  script draws inside a post now uses the CSS system colours, which resolve against the scheme in
+  force where the element is actually drawn. The action cluster was fixed the same way in 1.0.1;
+  this applies the rule to the chip, and writes it down where the palette is defined so the next
+  widget starts out right.
+
 ## [1.0.1] - 2026-09-23
 
 ### Fixed
@@ -115,5 +149,6 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.2]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.0

@@ -58,6 +58,7 @@ live behind its **Settings** button, and the script also registers commands in t
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion |
+| <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Toggle reading mode |
 | <kbd>t</kbd> | Cycle the translation-control mode |
 | <kbd>s</kbd> | Open settings |

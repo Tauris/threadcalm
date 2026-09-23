@@ -43,6 +43,7 @@ per-page click limit has been reached.
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion |
+| <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Toggle reading mode |
 | <kbd>t</kbd> | Cycle the translation-control mode |
 | <kbd>p</kbd> | Show or hide the status panel |
@@ -124,6 +125,25 @@ Three things are being traded against one another, and no mode wins all three:
 
 \* Nothing is ever covered by a pointer, because a pointer never summons it.
 
+Whichever mode you pick, <kbd>a</kbd> is the switch across all of them. It has two positions:
+
+- **Hidden** — the action bars do not come up at all. No hover reveals them, no focus reveals
+  them, nothing appears while you read. Every mode reveals the bar on *something*, and a control
+  that comes and goes is itself the distraction; this is the way to have none of it.
+- **Shown** — the mode you chose above applies exactly as configured.
+
+It is a live switch, not a setting: it lasts until the tab is reloaded and never rewrites what you
+chose here. Changing the mode returns it to *shown*, since picking a mode is the more explicit
+instruction of the two.
+
+It works in every mode, including *Always visible* — that is precisely where hiding them is worth
+having, since otherwise they never go away.
+
+While hidden, the buttons leave the tab order rather than staying focusable but invisible, which
+would only strand a keyboard user on controls nobody can see. This is the one place the script does
+that to a control, and it is safe because you asked for it with a keypress and the same keypress
+undoes it.
+
 **Fade** only makes the row invisible. It is the safest choice: the page never moves and no text is
 ever covered, but the row keeps its space, so you win nothing back vertically.
 
@@ -196,6 +216,17 @@ Two independent marks, drawn as a coloured rail to the left of a post:
 
 <kbd>c</kbd> copies the focused thread; <kbd>y</kbd> copies a link to it. Both are also on the
 per-post hover chip and in the userscript manager's menu.
+
+**The chip is this script's own invention** — Engage has nothing like it. It exists only as a
+visible reminder that copying is there at all, so **Copy buttons on posts** offers three answers:
+show it when you point at a post, show it only when you tab into one, or never show it and copy
+with <kbd>c</kbd> and <kbd>y</kbd>. The shortcuts work identically in all three, so switching it
+off costs you no ability, only the reminder.
+
+While it is shown, it sits in the post's top-right corner by default. Engage uses those corners
+itself — reactions in one, the action bar along the bottom — and which one is free differs between
+tenants, so **Where the copy buttons sit** moves it to any of the four. Note that *bottom right* is
+where the action bar's corner cluster appears, if you have that switched on.
 
 The thread is expanded first, so you cannot silently copy half a conversation. A very deeply
 paginated thread may need <kbd>c</kbd> twice.
@@ -297,7 +328,8 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Copy format | Markdown |
 | Include the thread link | on |
 | Include timestamps | on |
-| Show copy buttons on posts | on |
+| Copy buttons on posts | Show when I point at a post |
+| Where the copy buttons sit | Top right |
 | Keyboard shortcuts | on |
 
 ### General and advanced

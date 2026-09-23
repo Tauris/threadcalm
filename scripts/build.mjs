@@ -57,6 +57,25 @@ if (outfileArg && SELECTED.length > 1) {
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
 
 /**
+ * The version a channel advertises.
+ *
+ * A userscript manager decides whether to update by comparing `@version` and
+ * nothing else. Two beta builds of the same release therefore look identical
+ * to it, and the second one never reaches anybody -- which is exactly what
+ * happened, and is invisible from this side because the file on the branch is
+ * correct.
+ *
+ * So beta carries a fourth segment that counts pushes: 1.0.2.3. It is ordered,
+ * which a content hash is not, and it lives in package.json, which keeps the
+ * build reproducible -- a timestamp here would make --check fail on every run.
+ * Stable advertises the plain release version.
+ */
+function versionFor(channel) {
+  if (channel !== 'beta') return pkg.version;
+  return `${pkg.version}.${pkg.betaBuild ?? 0}`;
+}
+
+/**
  * The icon travels as a percent-encoded data URI.
  *
  * The readable SVG lives in src/meta.js; encoding it here keeps the emitted
@@ -110,9 +129,9 @@ function renderMetadataBlock(meta, version) {
  * The README is not what ends up in someone's userscript manager, so the
  * non-affiliation statement and the licence travel with the code.
  */
-function noticeFor(meta) {
+function noticeFor(meta, version) {
   return `/*!
- * ${meta.name} v${pkg.version}
+ * ${meta.name} v${version}
  * ${meta.homepageURL}
  *
  * Copyright (c) 2026 ${COPYRIGHT_HOLDER}. Licensed under the BSD 3-Clause License.
@@ -146,9 +165,7 @@ const baseOptions = {
   target: ['chrome110', 'firefox115', 'safari16'],
   charset: 'utf8',
   legalComments: 'inline',
-  define: {
-    __TC_VERSION__: JSON.stringify(pkg.version),
-  },
+  define: {},
   // Readability beats byte count here: a userscript is reviewed by the people
   // who install it, so the shipped bundle stays unminified.
   minify: false,
@@ -157,12 +174,14 @@ const baseOptions = {
 /** esbuild options for one channel and one build stamp. */
 function optionsFor(channel, build) {
   const meta = metadataFor(channel);
-  const banner = `${renderMetadataBlock(meta, pkg.version)}\n${noticeFor(meta)}`;
+  const version = versionFor(channel);
+  const banner = `${renderMetadataBlock(meta, version)}\n${noticeFor(meta, version)}`;
   return {
     ...baseOptions,
     banner: { js: banner },
     define: {
       ...baseOptions.define,
+      __TC_VERSION__: JSON.stringify(version),
       __TC_CHANNEL__: JSON.stringify(channel),
       __TC_BUILD__: JSON.stringify(build),
     },
@@ -237,6 +256,8 @@ if (CHECK) {
     const { text: output, stamp } = await buildToString(channel);
     await writeFile(file, output, 'utf8');
     const kb = (Buffer.byteLength(output, 'utf8') / 1024).toFixed(1);
-    console.log(`built ${display(file)} (${channel}, v${pkg.version}, ${stamp}, ${kb} kB)`);
+    console.log(
+      `built ${display(file)} (${channel}, v${versionFor(channel)}, ${stamp}, ${kb} kB)`,
+    );
   }
 }

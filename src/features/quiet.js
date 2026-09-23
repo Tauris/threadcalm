@@ -38,6 +38,8 @@ export const COMPOSER_CLASS = 'tc-quiet-composer';
 
 /** Mode classes on <html>, so a setting change is one class toggle. */
 export const MODE_CLASSES = {
+  /** Suppresses the bars outright, whatever the mode would otherwise do. */
+  hidden: 'tc-quiet-hidden',
   dim: 'tc-quiet-dim',
   collapse: 'tc-quiet-collapse',
   cluster: 'tc-quiet-cluster',
@@ -135,9 +137,23 @@ function loneAncestors(element) {
 }
 
 export function createQuietChrome() {
+  /**
+   * Whether the bars are suppressed outright for this page visit.
+   *
+   * Every mode reveals the bar on something -- a hover, a focus -- and a
+   * control that comes and goes is itself the distraction. So this is a
+   * two-state switch rather than a sixth mode: hidden, where nothing comes up
+   * at all, and shown, where the configured mode applies exactly as chosen.
+   *
+   * A live override rather than a setting: it lasts until the tab is reloaded
+   * and never quietly rewrites what was chosen in the settings sheet.
+   */
+  let hidden = false;
+
   function applyModes() {
     const root = document.documentElement;
     const mode = settings.get('quiet.actions');
+    root.classList.toggle(MODE_CLASSES.hidden, hidden);
 
     for (const [value, className] of Object.entries(ACTION_MODE_CLASSES)) {
       root.classList.toggle(className, mode === value);
@@ -211,7 +227,22 @@ export function createQuietChrome() {
     return { posts, composers };
   }
 
+  /**
+   * Suppresses the action bars outright, or hands them back to the mode.
+   *
+   * Works in every mode, including "always visible": hiding them is useful
+   * precisely when they would otherwise never go away.
+   *
+   * @returns {'hidden'|'shown'}
+   */
+  function toggleActions() {
+    hidden = !hidden;
+    applyModes();
+    return hidden ? 'hidden' : 'shown';
+  }
+
   function restore() {
+    hidden = false;
     const root = document.documentElement;
     for (const value of Object.values(MODE_CLASSES)) root.classList.remove(value);
     for (const element of document.querySelectorAll(`.${POST_CLASS}`)) {
@@ -234,10 +265,13 @@ export function createQuietChrome() {
     onNavigate: scheduleSweep,
     onSettingsChanged(changed) {
       if ('quiet.actions' in changed || 'quiet.composer' in changed) {
+        // Choosing a mode is an explicit decision, so it wins over the override.
+        if ('quiet.actions' in changed) hidden = false;
         applyModes();
         sweep();
       }
     },
+    toggleActions,
     sweep,
   };
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.0.1
+// @version     1.0.2.3
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.0.1
+ * Threadcalm (beta) v1.0.2.3
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -785,10 +785,63 @@
     },
     {
       key: "copy.showButtons",
-      type: "boolean",
-      default: true,
-      label: "Show copy buttons on posts",
-      help: 'Adds "copy thread" and "copy link" actions to each post header.'
+      type: "select",
+      default: "hover",
+      label: "Copy buttons on posts",
+      options: [
+        {
+          value: "hover",
+          label: "Show when I point at a post",
+          gain: "the only visible sign that copying exists",
+          cost: "one more thing moving as you read"
+        },
+        {
+          value: "focus",
+          label: "Show only when I tab into a post",
+          gain: "nothing appears while reading with a mouse",
+          cost: "invisible unless you use the keyboard"
+        },
+        {
+          value: "off",
+          label: "Never — use the keyboard",
+          gain: "nothing is added to a post at all",
+          cost: "copying is only c, y and the manager’s menu"
+        }
+      ],
+      help: "These buttons are this script’s own addition — Engage has nothing like them. c copies the focused thread and y copies a link to it whichever setting you pick, so turning them off loses no ability, only the reminder that it is there."
+    },
+    {
+      key: "copy.chipCorner",
+      type: "select",
+      default: "top-right",
+      label: "Where the copy buttons sit",
+      options: [
+        {
+          value: "top-right",
+          label: "Top right",
+          gain: "out of the way of the post body",
+          cost: "shares the corner Engage puts reactions in"
+        },
+        {
+          value: "top-left",
+          label: "Top left",
+          gain: "clear of the reactions and of the action bar",
+          cost: "sits near the author name and avatar"
+        },
+        {
+          value: "bottom-left",
+          label: "Bottom left",
+          gain: "clear of reactions, author and the corner cluster",
+          cost: "closest to the post body, so it can cover the last line"
+        },
+        {
+          value: "bottom-right",
+          label: "Bottom right",
+          gain: "furthest from everything Engage draws at the top",
+          cost: "collides with the action bar’s corner cluster, if you use it"
+        }
+      ],
+      help: "Engage draws its own controls in the corners of a post — reactions in one, the action bar along the bottom — and which corner is free differs between tenants and layouts. Move the buttons to whichever one is clear for you."
     },
     // -- Keyboard ------------------------------------------------------------
     {
@@ -855,6 +908,12 @@
     }
     return result;
   }
+  function migrate(key, value) {
+    if (key === "copy.showButtons" && typeof value === "boolean") {
+      return value ? "hover" : "off";
+    }
+    return value;
+  }
   function coerce(definition, value) {
     const fallback = Array.isArray(definition.default) ? [...definition.default] : definition.default;
     if (value == null) return fallback;
@@ -892,7 +951,7 @@
     if (stored && typeof stored === "object") {
       for (const [key, value] of Object.entries(stored)) {
         const definition = BY_KEY.get(key);
-        if (definition) next[key] = coerce(definition, value);
+        if (definition) next[key] = coerce(definition, migrate(key, value));
       }
     }
     current = next;
@@ -1215,6 +1274,16 @@
   // src/features/copy.js
   var CHIP_CLASS = "tc-chip";
   var HOST_CLASS = "tc-post";
+  var REVEAL_CLASSES = {
+    hover: "tc-chip-hover",
+    focus: "tc-chip-focus"
+  };
+  var CORNER_CLASSES = {
+    "top-right": "tc-chip-top-right",
+    "top-left": "tc-chip-top-left",
+    "bottom-left": "tc-chip-bottom-left",
+    "bottom-right": "tc-chip-bottom-right"
+  };
   function createCopyTools({ expander }) {
     const decorated = /* @__PURE__ */ new WeakMap();
     function toast(message, tone = "info") {
@@ -1297,7 +1366,7 @@
       );
     }
     function sweep() {
-      if (!get("copy.showButtons")) return;
+      if (get("copy.showButtons") === "off") return;
       for (const article of rootPosts()) {
         const existing = decorated.get(article);
         if (existing && existing.isConnected && article.contains(existing)) continue;
@@ -1307,7 +1376,24 @@
         decorated.set(article, chip);
       }
     }
+    function applyCorner() {
+      const chosen = CORNER_CLASSES[get("copy.chipCorner")];
+      const root = document.documentElement;
+      for (const className of Object.values(CORNER_CLASSES)) {
+        root.classList.toggle(className, className === chosen);
+      }
+    }
+    function applyReveal() {
+      const chosen = REVEAL_CLASSES[get("copy.showButtons")];
+      const root = document.documentElement;
+      for (const className of Object.values(REVEAL_CLASSES)) {
+        root.classList.toggle(className, className === chosen);
+      }
+    }
     function removeChips() {
+      for (const className of [...Object.values(CORNER_CLASSES), ...Object.values(REVEAL_CLASSES)]) {
+        document.documentElement.classList.remove(className);
+      }
       for (const chip of document.querySelectorAll(`.${CHIP_CLASS}`)) chip.remove();
       for (const host of document.querySelectorAll(`.${HOST_CLASS}`)) {
         host.classList.remove(HOST_CLASS);
@@ -1315,13 +1401,22 @@
     }
     const scheduleSweep = debounce(() => sweep(), 300);
     return {
-      start: sweep,
+      start() {
+        applyCorner();
+        applyReveal();
+        sweep();
+      },
       stop: removeChips,
       onDomChanged: scheduleSweep,
       onNavigate: scheduleSweep,
       onSettingsChanged() {
-        if (get("copy.showButtons")) sweep();
-        else removeChips();
+        if (get("copy.showButtons") === "off") {
+          removeChips();
+          return;
+        }
+        applyCorner();
+        applyReveal();
+        sweep();
       },
       copyThread,
       copyLink
@@ -1671,6 +1766,8 @@
   var POST_CLASS = "tc-quiet-post";
   var COMPOSER_CLASS = "tc-quiet-composer";
   var MODE_CLASSES = {
+    /** Suppresses the bars outright, whatever the mode would otherwise do. */
+    hidden: "tc-quiet-hidden",
     dim: "tc-quiet-dim",
     collapse: "tc-quiet-collapse",
     cluster: "tc-quiet-cluster",
@@ -1713,9 +1810,11 @@
     return found;
   }
   function createQuietChrome() {
+    let hidden = false;
     function applyModes() {
       const root = document.documentElement;
       const mode = get("quiet.actions");
+      root.classList.toggle(MODE_CLASSES.hidden, hidden);
       for (const [value, className] of Object.entries(ACTION_MODE_CLASSES)) {
         root.classList.toggle(className, mode === value);
       }
@@ -1764,7 +1863,13 @@
       }
       return { posts, composers };
     }
+    function toggleActions() {
+      hidden = !hidden;
+      applyModes();
+      return hidden ? "hidden" : "shown";
+    }
     function restore() {
+      hidden = false;
       const root = document.documentElement;
       for (const value of Object.values(MODE_CLASSES)) root.classList.remove(value);
       for (const element of document.querySelectorAll(`.${POST_CLASS}`)) {
@@ -1785,10 +1890,12 @@
       onNavigate: scheduleSweep,
       onSettingsChanged(changed) {
         if ("quiet.actions" in changed || "quiet.composer" in changed) {
+          if ("quiet.actions" in changed) hidden = false;
           applyModes();
           sweep();
         }
       },
+      toggleActions,
       sweep
     };
   }
@@ -1883,6 +1990,7 @@
     { keys: ["c"], label: "Copy the focused thread" },
     { keys: ["y"], label: "Copy a link to the focused thread" },
     { keys: ["e"], label: "Pause or resume automatic expansion" },
+    { keys: ["a"], label: "Hide the action bars outright, or show them again" },
     { keys: ["r"], label: "Toggle reading mode" },
     { keys: ["t"], label: "Cycle the translation-control mode" },
     { keys: ["s"], label: "Open settings" },
@@ -1891,7 +1999,7 @@
     { keys: ["Escape"], label: "Close help or settings" }
   ];
   var TRANSLATE_MODES = ["compact", "known", "hide", "off"];
-  function createShortcuts({ expander, copyTools, readingMode, panel }) {
+  function createShortcuts({ expander, copyTools, readingMode, panel, quietChrome }) {
     let focusIndex = -1;
     let overlay = null;
     let unsubscribeHelp = null;
@@ -2025,6 +2133,11 @@
         case "e": {
           const paused = expander.togglePause();
           toast(paused ? "Expansion paused" : "Expansion resumed");
+          break;
+        }
+        case "a": {
+          const state = quietChrome?.toggleActions?.();
+          if (state) toast(state === "hidden" ? "Action bars hidden" : "Action bars shown");
           break;
         }
         case "r":
@@ -3159,6 +3272,26 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
   pointer-events: auto;
 }
 
+/*
+ * The "a" key: action bars suppressed outright.
+ *
+ * Last in this section and marked !important because it has to beat every
+ * reveal rule above it, including the :hover and :focus-within ones that are
+ * more specific than it is.
+ *
+ * This is the one place the script uses "visibility: hidden" on a control,
+ * which the rest of the file is careful never to do. The reason it is safe
+ * here is that it is not a default: somebody asked for it with a keypress,
+ * the same keypress undoes it, and the shortcut list says so. Leaving the
+ * buttons focusable but invisible would be worse -- tabbing would land on
+ * controls nobody can see.
+ */
+html.tc-quiet-hidden .tc-quiet-post [data-testid="overflow-set"] {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* ------------------------------------------------------------ declutter -- */
 
 .tc-decluttered { display: none !important; }
@@ -3197,6 +3330,14 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
 
 .tc-post { position: relative; }
 
+/*
+ * The copy chip, in whichever corner is free.
+ *
+ * Engage uses the corners of a post itself -- reactions in one, the action bar
+ * along the bottom -- and which one is clear depends on the tenant and the
+ * layout, so the corner is a setting rather than a decision made here. The
+ * default stays top-right; the class on <html> moves it.
+ */
 .tc-chip {
   position: absolute;
   top: 4px;
@@ -3208,15 +3349,59 @@ html.tc-quiet-composer-on .tc-quiet-composer:focus-within {
   transition: opacity .12s ease;
 }
 
-.tc-post:hover .tc-chip,
-.tc-chip:focus-within { opacity: 1; }
+html.tc-chip-top-left .tc-chip {
+  top: 4px;
+  bottom: auto;
+  left: 4px;
+  right: auto;
+}
 
+html.tc-chip-bottom-left .tc-chip {
+  top: auto;
+  bottom: 4px;
+  left: 4px;
+  right: auto;
+}
+
+html.tc-chip-bottom-right .tc-chip {
+  top: auto;
+  bottom: 4px;
+  left: auto;
+  right: 4px;
+}
+
+/*
+ * What summons the chip. Focus always does -- it is the only way a keyboard
+ * reaches these buttons at all -- while the pointer does so only in "hover"
+ * mode, so a reader who finds them distracting can have them appear for the
+ * keyboard alone.
+ */
+.tc-chip:focus-within { opacity: 1; }
+html.tc-chip-hover .tc-post:hover .tc-chip { opacity: 1; }
+html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
+
+/*
+ * The copy chip is drawn inside a post, so it has to match the page rather
+ * than the operating system.
+ *
+ * --tc-bg and its neighbours come from prefers-color-scheme, which is the
+ * browser's idea of light or dark. Engage has its own theme setting, and the
+ * two disagree often: a dark OS with Engage in light mode turned this chip
+ * into a black rectangle on a white post. Canvas and CanvasText resolve
+ * against the colour scheme in force where the element is actually drawn, so
+ * they follow Engage.
+ *
+ * The rule that falls out, and that the action cluster above follows too:
+ * anything this script draws *inside* Engage's content uses system colours;
+ * the panel, the settings sheet and the toasts are our own floating surfaces
+ * and keep our palette.
+ */
 .tc-chip button {
   padding: 1px 6px;
-  border: 1px solid var(--tc-border);
+  border: 1px solid rgba(128, 128, 128, .4);
   border-radius: 4px;
-  background: var(--tc-bg);
-  color: var(--tc-muted);
+  background: Canvas;
+  color: CanvasText;
   font: 10px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   letter-spacing: .02em;
   cursor: pointer;
@@ -3301,9 +3486,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.1" : "0.0.0-dev";
+  var VERSION = true ? "1.0.2.3" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "c22a365" : "dev";
+  var BUILD = true ? "3a263f2" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -3329,7 +3514,13 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       channel: CHANNEL,
       build: BUILD
     });
-    const shortcuts = createShortcuts({ expander, copyTools, readingMode, panel });
+    const shortcuts = createShortcuts({
+      expander,
+      copyTools,
+      readingMode,
+      panel,
+      quietChrome
+    });
     const features = [
       expander,
       translate,

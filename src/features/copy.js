@@ -22,6 +22,30 @@ import { countPosts, extractPost, renderThread } from './thread.js';
 export const CHIP_CLASS = 'tc-chip';
 export const HOST_CLASS = 'tc-post';
 
+/**
+ * Which corner the chip sits in, as a class on the document element.
+ *
+ * Engage draws its own things in a post's corners -- reactions in one, the
+ * action bar along the bottom -- and which corner is free differs between
+ * tenants. So the corner is a setting, and CSS does the placing.
+ */
+/**
+ * How the chip is revealed, as a class on the document element.
+ *
+ * "off" has no class because nothing is rendered at all in that mode.
+ */
+export const REVEAL_CLASSES = {
+  hover: 'tc-chip-hover',
+  focus: 'tc-chip-focus',
+};
+
+export const CORNER_CLASSES = {
+  'top-right': 'tc-chip-top-right',
+  'top-left': 'tc-chip-top-left',
+  'bottom-left': 'tc-chip-bottom-left',
+  'bottom-right': 'tc-chip-bottom-right',
+};
+
 export function createCopyTools({ expander }) {
   /** Posts we have already decorated, so the sweep stays cheap. */
   const decorated = new WeakMap();
@@ -128,7 +152,7 @@ export function createCopyTools({ expander }) {
   }
 
   function sweep() {
-    if (!settings.get('copy.showButtons')) return;
+    if (settings.get('copy.showButtons') === 'off') return;
 
     for (const article of rootPosts()) {
       const existing = decorated.get(article);
@@ -142,7 +166,28 @@ export function createCopyTools({ expander }) {
     }
   }
 
+  /** Puts exactly one corner class on <html>, so CSS can place the chip. */
+  function applyCorner() {
+    const chosen = CORNER_CLASSES[settings.get('copy.chipCorner')];
+    const root = document.documentElement;
+    for (const className of Object.values(CORNER_CLASSES)) {
+      root.classList.toggle(className, className === chosen);
+    }
+  }
+
+  /** And one reveal class, so CSS decides what summons it. */
+  function applyReveal() {
+    const chosen = REVEAL_CLASSES[settings.get('copy.showButtons')];
+    const root = document.documentElement;
+    for (const className of Object.values(REVEAL_CLASSES)) {
+      root.classList.toggle(className, className === chosen);
+    }
+  }
+
   function removeChips() {
+    for (const className of [...Object.values(CORNER_CLASSES), ...Object.values(REVEAL_CLASSES)]) {
+      document.documentElement.classList.remove(className);
+    }
     for (const chip of document.querySelectorAll(`.${CHIP_CLASS}`)) chip.remove();
     for (const host of document.querySelectorAll(`.${HOST_CLASS}`)) {
       host.classList.remove(HOST_CLASS);
@@ -152,13 +197,22 @@ export function createCopyTools({ expander }) {
   const scheduleSweep = debounce(() => sweep(), 300);
 
   return {
-    start: sweep,
+    start() {
+      applyCorner();
+      applyReveal();
+      sweep();
+    },
     stop: removeChips,
     onDomChanged: scheduleSweep,
     onNavigate: scheduleSweep,
     onSettingsChanged() {
-      if (settings.get('copy.showButtons')) sweep();
-      else removeChips();
+      if (settings.get('copy.showButtons') === 'off') {
+        removeChips();
+        return;
+      }
+      applyCorner();
+      applyReveal();
+      sweep();
     },
     copyThread,
     copyLink,

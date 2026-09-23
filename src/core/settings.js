@@ -297,10 +297,63 @@ export const SCHEMA = [
   },
   {
     key: 'copy.showButtons',
-    type: 'boolean',
-    default: true,
-    label: 'Show copy buttons on posts',
-    help: 'Adds "copy thread" and "copy link" actions to each post header.',
+    type: 'select',
+    default: 'hover',
+    label: 'Copy buttons on posts',
+    options: [
+      {
+        value: 'hover',
+        label: 'Show when I point at a post',
+        gain: 'the only visible sign that copying exists',
+        cost: 'one more thing moving as you read',
+      },
+      {
+        value: 'focus',
+        label: 'Show only when I tab into a post',
+        gain: 'nothing appears while reading with a mouse',
+        cost: 'invisible unless you use the keyboard',
+      },
+      {
+        value: 'off',
+        label: 'Never \u2014 use the keyboard',
+        gain: 'nothing is added to a post at all',
+        cost: 'copying is only c, y and the manager\u2019s menu',
+      },
+    ],
+    help: 'These buttons are this script\u2019s own addition \u2014 Engage has nothing like them. c copies the focused thread and y copies a link to it whichever setting you pick, so turning them off loses no ability, only the reminder that it is there.',
+  },
+  {
+    key: 'copy.chipCorner',
+    type: 'select',
+    default: 'top-right',
+    label: 'Where the copy buttons sit',
+    options: [
+      {
+        value: 'top-right',
+        label: 'Top right',
+        gain: 'out of the way of the post body',
+        cost: 'shares the corner Engage puts reactions in',
+      },
+      {
+        value: 'top-left',
+        label: 'Top left',
+        gain: 'clear of the reactions and of the action bar',
+        cost: 'sits near the author name and avatar',
+      },
+      {
+        value: 'bottom-left',
+        label: 'Bottom left',
+        gain: 'clear of reactions, author and the corner cluster',
+        cost: 'closest to the post body, so it can cover the last line',
+      },
+      {
+        value: 'bottom-right',
+        label: 'Bottom right',
+        gain: 'furthest from everything Engage draws at the top',
+        cost: 'collides with the action bar\u2019s corner cluster, if you use it',
+      },
+    ],
+    help: 'Engage draws its own controls in the corners of a post \u2014 reactions in one, the action bar along the bottom \u2014 and which corner is free differs between tenants and layouts. Move the buttons to whichever one is clear for you.',
   },
 
   // -- Keyboard ------------------------------------------------------------
@@ -383,6 +436,22 @@ export function defaults() {
  * Forces a stored value into the shape the schema promises.
  * Anything unusable falls back to the default rather than propagating.
  */
+/**
+ * Rewrites a stored value whose shape has changed since it was written.
+ *
+ * Without this, a setting that grows from a switch into a choice silently
+ * reverts everyone to its default, which is the opposite of what they asked
+ * for. Keyed by the old shape rather than by a version number, so it stays
+ * correct however old the stored settings are.
+ */
+function migrate(key, value) {
+  // copy.showButtons was a boolean before it offered "only on focus".
+  if (key === 'copy.showButtons' && typeof value === 'boolean') {
+    return value ? 'hover' : 'off';
+  }
+  return value;
+}
+
 function coerce(definition, value) {
   const fallback = Array.isArray(definition.default)
     ? [...definition.default]
@@ -432,7 +501,7 @@ export function load() {
     for (const [key, value] of Object.entries(stored)) {
       const definition = BY_KEY.get(key);
       // Unknown keys are dropped: they are leftovers from a removed feature.
-      if (definition) next[key] = coerce(definition, value);
+      if (definition) next[key] = coerce(definition, migrate(key, value));
     }
   }
   current = next;

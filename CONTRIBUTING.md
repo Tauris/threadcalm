@@ -83,11 +83,22 @@ every feature would apply twice.
 
 1. Work on a branch as usual. `npm run build` writes both artefacts; `npm run watch:beta` follows
    the beta one while you iterate locally.
-2. Point the `beta` branch at what you want to test:
+2. Bump the beta build counter, rebuild, and point the `beta` branch at it:
 
    ```bash
-   git push --force origin HEAD:beta
+   npm run beta:bump && npm run build
+   git commit -am "..." && git push --force origin HEAD:beta
    ```
+
+   The bump matters more than it looks. A userscript manager decides whether to update by
+   comparing `@version` and nothing else, so a beta that keeps the previous version is never
+   fetched by the people testing it — and nothing looks wrong from your side, because the file on
+   the branch is correct. The counter becomes a fourth version segment (`1.0.2.3`), which is
+   ordered, unlike the build stamp.
+
+   Note also that `raw.githubusercontent.com` serves with `max-age=300`, so for five minutes after
+   a force-push you can still be handed the previous file. If a build seems not to have landed,
+   check the stamp in the panel before assuming the push failed.
 
    `beta` is a moving pointer at whatever is under test, not a line of history, so force-pushing
    it is the expected way to use it.

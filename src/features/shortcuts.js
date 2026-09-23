@@ -33,6 +33,7 @@ export const BINDINGS = [
   { keys: ['c'], label: 'Copy the focused thread' },
   { keys: ['y'], label: 'Copy a link to the focused thread' },
   { keys: ['e'], label: 'Pause or resume automatic expansion' },
+  { keys: ['a'], label: 'Hide the action bars outright, or show them again' },
   { keys: ['r'], label: 'Toggle reading mode' },
   { keys: ['t'], label: 'Cycle the translation-control mode' },
   { keys: ['s'], label: 'Open settings' },
@@ -43,7 +44,7 @@ export const BINDINGS = [
 
 const TRANSLATE_MODES = ['compact', 'known', 'hide', 'off'];
 
-export function createShortcuts({ expander, copyTools, readingMode, panel }) {
+export function createShortcuts({ expander, copyTools, readingMode, panel, quietChrome }) {
   let focusIndex = -1;
   let overlay = null;
   let unsubscribeHelp = null;
@@ -203,6 +204,11 @@ export function createShortcuts({ expander, copyTools, readingMode, panel }) {
       case 'e': {
         const paused = expander.togglePause();
         toast(paused ? 'Expansion paused' : 'Expansion resumed');
+        break;
+      }
+      case 'a': {
+        const state = quietChrome?.toggleActions?.();
+        if (state) toast(state === 'hidden' ? 'Action bars hidden' : 'Action bars shown');
         break;
       }
       case 'r':
