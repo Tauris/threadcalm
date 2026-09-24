@@ -5,6 +5,24 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-09-24
+
+### Changed
+
+- **Reading mode now does what it says.** It was built as layout — a narrower column, hidden side
+  rails, tighter lines — aimed at page landmarks Engage turned out not to use, so on a real page
+  it did little more than centre the column. It is now one switch for a quiet page, built from
+  features known to work: the action bar as a corner cluster, comment boxes and copy buttons out
+  of sight, translate controls as an icon, promoted cards and the app bar gone. It only ever makes
+  the page quieter, leaving alone anything you have already made at least as quiet.
+- **Reading mode never changes your settings.** It holds settings quieter for as long as it is on,
+  and switching it off hands back exactly what you had. The settings sheet keeps showing and
+  editing your own values, tags the ones it is holding, and says so at the top; the panel shows a
+  **Reading** pill while it is on, which also switches it off.
+- The reading column width and the side-rail switch are gone, since neither had an effect on
+  Engage. *Hide the top app bar in reading mode* is now *Keep the app bar in reading mode*, off by
+  default, so the app bar goes with reading mode unless you keep it.
+
 ## [1.0.5] - 2026-09-24
 
 ### Fixed
@@ -251,6 +269,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.6]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.6
 [1.0.5]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.3

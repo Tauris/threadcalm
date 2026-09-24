@@ -27,6 +27,7 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
   const buildLabel = channel === 'stable' ? `v${version} · ${stamp}`
     : `v${version} · ${channel} · ${stamp}`;
   let panel = null;
+  let readingPill = null;
   let statusText = null;
   let pauseButton = null;
   let sheet = null;
@@ -73,6 +74,16 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
         brandMark(),
         brandLink(el),
         channel === 'stable' ? null : el('span', { className: 'tc-chip-pre', text: channel }),
+        // Says reading mode is on -- several settings are being held quieter
+        // than the reader set them -- and is the way out of it.
+        (readingPill = el('button', {
+          type: 'button',
+          className: 'tc-mode-pill',
+          text: 'Reading',
+          title: 'Reading mode is on. Click, or press r, to return to your own settings.',
+          hidden: !settings.getOwn('reading.enabled'),
+          on: { click: () => settings.update({ 'reading.enabled': false }) },
+        })),
         el('span', {
           className: 'tc-stamp',
           text: `v${version} · ${stamp}`,
@@ -178,10 +189,20 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
   /** The left-hand half of every row: what the setting is, and what it does. */
   function describe(definition, id) {
     const { text } = splitUnit(definition.label);
+    // A setting reading mode is holding keeps the reader's own value in its
+    // control -- that is what they are editing -- and says so, rather than
+    // showing the imposed value and seeming to ignore their changes.
+    const held = settings.isOverridden(definition.key)
+      ? el('span', {
+          className: 'tc-held',
+          text: 'Reading mode',
+          title: 'Held quieter while reading mode is on; your choice here applies once it is off.',
+        })
+      : null;
     return el(
       'span',
       { className: 'tc-field-text' },
-      el('span', { className: 'tc-label', id: `${id}-label`, text }),
+      el('span', { className: 'tc-label', id: `${id}-label` }, text, held),
       definition.help
         ? el('span', { className: 'tc-help', id: `${id}-help`, text: definition.help })
         : null,
@@ -197,7 +218,7 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
    * pretends to be a control.
    */
   function renderField(definition) {
-    const value = settings.get(definition.key);
+    const value = settings.getOwn(definition.key);
     const id = fieldId(definition);
     const describedBy = definition.help ? `${id}-help` : null;
     const commit = (next) => settings.update({ [definition.key]: next });
@@ -429,6 +450,18 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
     );
 
     const content = el('div', { className: 'tc-sheet-body' });
+    if (settings.getOwn('reading.enabled')) {
+      content.append(
+        el(
+          'p',
+          { className: 'tc-notice' },
+          el('strong', { text: 'Reading mode is on. ' }),
+          'Settings tagged ',
+          el('span', { className: 'tc-held', text: 'Reading mode' }),
+          ' are held quieter until it is switched off; what you choose here applies then.',
+        ),
+      );
+    }
     for (const group of GROUPS) {
       const definitions = settings.definitionsFor(group.id);
       if (definitions.length === 0) continue;
@@ -533,6 +566,9 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
         bus.on(EVENTS.EXPAND_STATE, onState),
         bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
           if ('general.showPanel' in changed) applyVisibility();
+          if ('reading.enabled' in changed && readingPill) {
+            readingPill.hidden = !settings.getOwn('reading.enabled');
+          }
         }),
       ];
     },

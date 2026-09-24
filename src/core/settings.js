@@ -238,30 +238,23 @@ export const SCHEMA = [
     key: 'reading.enabled',
     type: 'boolean',
     default: false,
-    label: 'Compact reading mode',
-    help: 'Narrower column, tighter spacing, quieter chrome.',
+    label: 'Reading mode',
+    help:
+      'One switch for a quiet page: the action bar becomes a corner cluster, comment boxes and '
+      + 'copy buttons stay out of sight, translate controls shrink to an icon, promoted cards go, '
+      + 'and so does the app bar. Your own settings below are kept and come back when it is off. '
+      + 'Press r to switch it.',
   },
   {
-    key: 'reading.maxWidth',
-    type: 'number',
-    default: 760,
-    min: 480,
-    max: 1600,
-    step: 20,
-    label: 'Reading column width (px)',
-  },
-  {
-    key: 'reading.hideSidebars',
-    type: 'boolean',
-    default: true,
-    label: 'Hide side rails in reading mode',
-  },
-  {
-    key: 'reading.hideBanner',
+    // Named for keeping rather than hiding so its default is the one the
+    // preset wants for everybody: a stored "hide the banner: false" written
+    // by an older version would otherwise have kept the bar for anyone who
+    // had ever changed any setting.
+    key: 'reading.keepBanner',
     type: 'boolean',
     default: false,
-    label: 'Hide the top app bar in reading mode',
-    help: 'Reclaims the sticky header. Search and the app launcher go with it, so this is off by default.',
+    label: 'Keep the app bar in reading mode',
+    help: 'Reading mode hides the sticky bar at the top. Search, the app launcher and the account menu go with it; keep it if you need those while reading.',
   },
 
   // -- Clutter -------------------------------------------------------------
@@ -531,11 +524,65 @@ export function all() {
 }
 
 /** @param {string} key */
+/**
+ * Values imposed on top of the reader's own, for as long as something asks.
+ *
+ * Reading mode works through this rather than by writing settings: switching
+ * it off must hand back exactly what the reader had chosen, and it cannot do
+ * that if it has overwritten those choices. Overrides are never stored.
+ */
+let overrides = {};
+
+/** The value in effect: an override if one is imposed, else the reader's own. */
 export function get(key) {
   if (!BY_KEY.has(key)) {
     throw new Error(`Unknown setting: ${key}`);
   }
+  return Object.hasOwn(overrides, key) ? overrides[key] : current[key];
+}
+
+/** The reader's own value, ignoring overrides: what the settings sheet shows and edits. */
+export function getOwn(key) {
+  if (!BY_KEY.has(key)) {
+    throw new Error(`Unknown setting: ${key}`);
+  }
   return current[key];
+}
+
+/** Whether a setting is currently being overridden. */
+export function isOverridden(key) {
+  return Object.hasOwn(overrides, key);
+}
+
+/**
+ * Replaces the whole set of overrides.
+ *
+ * Emits SETTINGS_CHANGED for exactly the keys whose *effective* value moved,
+ * so features re-apply only what changed -- and emits nothing when nothing
+ * did, which is what keeps a caller that reacts to that event from looping.
+ */
+export function setOverrides(next) {
+  const coerced = {};
+  for (const [key, value] of Object.entries(next ?? {})) {
+    const definition = BY_KEY.get(key);
+    if (definition) coerced[key] = coerce(definition, value);
+  }
+
+  const touched = new Set([...Object.keys(overrides), ...Object.keys(coerced)]);
+  const before = {};
+  for (const key of touched) before[key] = get(key);
+
+  overrides = coerced;
+
+  const changed = {};
+  for (const key of touched) {
+    const after = get(key);
+    if (JSON.stringify(after) !== JSON.stringify(before[key])) changed[key] = after;
+  }
+  if (Object.keys(changed).length > 0) {
+    bus.emit(EVENTS.SETTINGS_CHANGED, { changed, settings: current });
+  }
+  return changed;
 }
 
 /**

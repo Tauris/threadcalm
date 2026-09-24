@@ -88,12 +88,14 @@ function main() {
   });
 
   const features = [
+    // First, so its overrides are in place before anything else reads a
+    // setting; otherwise the page would briefly render without them.
+    readingMode,
     expander,
     translate,
     declutter,
     highlighter,
     quietChrome,
-    readingMode,
     copyTools,
     toaster,
     panel,

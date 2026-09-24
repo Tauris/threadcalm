@@ -24,7 +24,7 @@ that is reading. Threadcalm does the clicking.
 | **Compact translation controls** | Collapses `Show translation` to a small globe that expands on hover or focus — or hides it entirely on posts already written in a language you read. |
 | **Copy as Markdown** | Copies a thread, replies nested as blockquotes, with authors, timestamps and a permalink. Plain text too. |
 | **Keyboard shortcuts** | `j`/`k` to move between posts, `c` to copy, `o` to expand, `?` for the list. |
-| **Reading mode** | Narrows the column, hides the side rails, tightens the spacing. |
+| **Reading mode** | One key for a quiet page: the action bar as a corner cluster, comment boxes and copy buttons out of sight, translate controls as an icon, promoted cards and the app bar gone. The same key hands your own settings back. |
 | **Quiet post chrome** | Optionally quiets the Like / Comment / Share bar and the inline comment and reply pills. Six modes for the bar, each trading space against movement against how much of the post is covered. Off by default. |
 | **Clutter removal** | Hides cards labelled sponsored, promoted or suggested. |
 | **Highlighting** | Marks posts with no replies, and posts you have not seen before. |
@@ -59,7 +59,7 @@ live behind its **Settings** button, and the script also registers commands in t
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
-| <kbd>r</kbd> | Toggle reading mode |
+| <kbd>r</kbd> | Reading mode on or off |
 | <kbd>t</kbd> | Cycle the translation-control mode |
 | <kbd>s</kbd> | Open settings |
 | <kbd>p</kbd> | Show or hide the status panel |

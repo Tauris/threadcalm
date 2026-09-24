@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.0.5.10
+// @version     1.0.6.11
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.0.5.10
+ * Threadcalm (beta) v1.0.6.11
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -767,30 +767,19 @@
       key: "reading.enabled",
       type: "boolean",
       default: false,
-      label: "Compact reading mode",
-      help: "Narrower column, tighter spacing, quieter chrome."
+      label: "Reading mode",
+      help: "One switch for a quiet page: the action bar becomes a corner cluster, comment boxes and copy buttons stay out of sight, translate controls shrink to an icon, promoted cards go, and so does the app bar. Your own settings below are kept and come back when it is off. Press r to switch it."
     },
     {
-      key: "reading.maxWidth",
-      type: "number",
-      default: 760,
-      min: 480,
-      max: 1600,
-      step: 20,
-      label: "Reading column width (px)"
-    },
-    {
-      key: "reading.hideSidebars",
-      type: "boolean",
-      default: true,
-      label: "Hide side rails in reading mode"
-    },
-    {
-      key: "reading.hideBanner",
+      // Named for keeping rather than hiding so its default is the one the
+      // preset wants for everybody: a stored "hide the banner: false" written
+      // by an older version would otherwise have kept the bar for anyone who
+      // had ever changed any setting.
+      key: "reading.keepBanner",
       type: "boolean",
       default: false,
-      label: "Hide the top app bar in reading mode",
-      help: "Reclaims the sticky header. Search and the app launcher go with it, so this is off by default."
+      label: "Keep the app bar in reading mode",
+      help: "Reading mode hides the sticky bar at the top. Search, the app launcher and the account menu go with it; keep it if you need those while reading."
     },
     // -- Clutter -------------------------------------------------------------
     {
@@ -1012,11 +1001,41 @@
     setDebug(current["general.debug"]);
     return current;
   }
+  var overrides = {};
   function get(key) {
     if (!BY_KEY.has(key)) {
       throw new Error(`Unknown setting: ${key}`);
     }
+    return Object.hasOwn(overrides, key) ? overrides[key] : current[key];
+  }
+  function getOwn(key) {
+    if (!BY_KEY.has(key)) {
+      throw new Error(`Unknown setting: ${key}`);
+    }
     return current[key];
+  }
+  function isOverridden(key) {
+    return Object.hasOwn(overrides, key);
+  }
+  function setOverrides(next) {
+    const coerced = {};
+    for (const [key, value] of Object.entries(next ?? {})) {
+      const definition = BY_KEY.get(key);
+      if (definition) coerced[key] = coerce(definition, value);
+    }
+    const touched = /* @__PURE__ */ new Set([...Object.keys(overrides), ...Object.keys(coerced)]);
+    const before = {};
+    for (const key of touched) before[key] = get(key);
+    overrides = coerced;
+    const changed = {};
+    for (const key of touched) {
+      const after = get(key);
+      if (JSON.stringify(after) !== JSON.stringify(before[key])) changed[key] = after;
+    }
+    if (Object.keys(changed).length > 0) {
+      bus.emit(EVENTS.SETTINGS_CHANGED, { changed, settings: current });
+    }
+    return changed;
   }
   function update(changes) {
     const applied = {};
@@ -2152,29 +2171,42 @@
 
   // src/features/reading.js
   var READING_CLASS = "tc-reading";
-  var NO_RAILS_CLASS = "tc-no-rails";
   var NO_BANNER_CLASS = "tc-no-banner";
+  var PRESET = {
+    "quiet.actions": { value: "cluster", quieter: ["cluster", "cluster-focus"] },
+    "quiet.composer": { value: true },
+    "copy.showButtons": { value: "focus", quieter: ["focus", "off"] },
+    "translate.mode": { value: "compact", quieter: ["compact", "known", "hide"] },
+    "declutter.enabled": { value: true }
+  };
+  function readingOverrides() {
+    const imposed = {};
+    for (const [key, { value, quieter = [value] }] of Object.entries(PRESET)) {
+      if (!quieter.includes(getOwn(key))) imposed[key] = value;
+    }
+    return imposed;
+  }
   function createReadingMode() {
     function apply() {
       const root = document.documentElement;
-      const enabled = get("reading.enabled");
+      const enabled = getOwn("reading.enabled");
       root.classList.toggle(READING_CLASS, enabled);
-      root.classList.toggle(NO_RAILS_CLASS, enabled && get("reading.hideSidebars"));
-      root.classList.toggle(NO_BANNER_CLASS, enabled && get("reading.hideBanner"));
-      root.style.setProperty("--tc-reading-width", `${get("reading.maxWidth")}px`);
+      root.classList.toggle(NO_BANNER_CLASS, enabled && !getOwn("reading.keepBanner"));
+      setOverrides(enabled ? readingOverrides() : {});
     }
     return {
       start: apply,
       stop() {
-        document.documentElement.classList.remove(READING_CLASS, NO_RAILS_CLASS, NO_BANNER_CLASS);
+        document.documentElement.classList.remove(READING_CLASS, NO_BANNER_CLASS);
+        setOverrides({});
       },
       onSettingsChanged: apply,
       onNavigate: apply,
       toggle() {
-        update({ "reading.enabled": !get("reading.enabled") });
-        return get("reading.enabled");
+        update({ "reading.enabled": !getOwn("reading.enabled") });
+        return getOwn("reading.enabled");
       },
-      isEnabled: () => get("reading.enabled")
+      isEnabled: () => getOwn("reading.enabled")
     };
   }
 
@@ -2430,7 +2462,9 @@
           break;
         }
         case "r":
-          toast(readingMode.toggle() ? "Reading mode on" : "Reading mode off");
+          toast(
+            readingMode.toggle() ? "Reading mode on — quieter page. r to return to your own settings." : "Reading mode off — your own settings are back."
+          );
           break;
         case "t":
           cycleTranslateMode();
@@ -2607,6 +2641,7 @@
   function createPanel({ expander, highlighter, version, channel = "dev", build: stamp = "dev" }) {
     const buildLabel = channel === "stable" ? `v${version} · ${stamp}` : `v${version} · ${channel} · ${stamp}`;
     let panel = null;
+    let readingPill = null;
     let statusText = null;
     let pauseButton = null;
     let sheet = null;
@@ -2644,6 +2679,16 @@
           brandMark(),
           brandLink(el),
           channel === "stable" ? null : el("span", { className: "tc-chip-pre", text: channel }),
+          // Says reading mode is on -- several settings are being held quieter
+          // than the reader set them -- and is the way out of it.
+          readingPill = el("button", {
+            type: "button",
+            className: "tc-mode-pill",
+            text: "Reading",
+            title: "Reading mode is on. Click, or press r, to return to your own settings.",
+            hidden: !getOwn("reading.enabled"),
+            on: { click: () => update({ "reading.enabled": false }) }
+          }),
           el("span", {
             className: "tc-stamp",
             text: `v${version} · ${stamp}`,
@@ -2720,15 +2765,20 @@
     }
     function describe(definition, id) {
       const { text } = splitUnit(definition.label);
+      const held = isOverridden(definition.key) ? el("span", {
+        className: "tc-held",
+        text: "Reading mode",
+        title: "Held quieter while reading mode is on; your choice here applies once it is off."
+      }) : null;
       return el(
         "span",
         { className: "tc-field-text" },
-        el("span", { className: "tc-label", id: `${id}-label`, text }),
+        el("span", { className: "tc-label", id: `${id}-label` }, text, held),
         definition.help ? el("span", { className: "tc-help", id: `${id}-help`, text: definition.help }) : null
       );
     }
     function renderField(definition) {
-      const value = get(definition.key);
+      const value = getOwn(definition.key);
       const id = fieldId(definition);
       const describedBy = definition.help ? `${id}-help` : null;
       const commit = (next) => update({ [definition.key]: next });
@@ -2936,6 +2986,18 @@
         iconButton("close", "Close settings (Esc)", closeSettings)
       );
       const content = el("div", { className: "tc-sheet-body" });
+      if (getOwn("reading.enabled")) {
+        content.append(
+          el(
+            "p",
+            { className: "tc-notice" },
+            el("strong", { text: "Reading mode is on. " }),
+            "Settings tagged ",
+            el("span", { className: "tc-held", text: "Reading mode" }),
+            " are held quieter until it is switched off; what you choose here applies then."
+          )
+        );
+      }
       for (const group of GROUPS) {
         const definitions = definitionsFor(group.id);
         if (definitions.length === 0) continue;
@@ -3027,6 +3089,9 @@
           bus.on(EVENTS.EXPAND_STATE, onState),
           bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
             if ("general.showPanel" in changed) applyVisibility();
+            if ("reading.enabled" in changed && readingPill) {
+              readingPill.hidden = !getOwn("reading.enabled");
+            }
           })
         ];
       },
@@ -3097,7 +3162,6 @@
   /* Also used inside posts. */
   --tc-new: #2f6f68;
   --tc-unanswered: #c19c00;
-  --tc-reading-width: 760px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -3301,6 +3365,22 @@
   text-transform: uppercase;
 }
 
+/* On while reading mode is on; also its off switch. */
+#tc-panel .tc-mode-pill {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent);
+  font: 650 10px/1 var(--tc-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background-color .12s ease;
+}
+
+#tc-panel .tc-mode-pill:hover { background: var(--tc-accent-ring); }
+#tc-panel .tc-mode-pill[hidden] { display: none; }
+
 #tc-panel .tc-row {
   display: flex;
   align-items: center;
@@ -3466,6 +3546,32 @@
   color: var(--tc-fg);
   font-weight: 500;
 }
+
+#tc-settings .tc-held {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  vertical-align: 1px;
+}
+
+#tc-settings .tc-notice {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--tc-accent-ring);
+  border-radius: 10px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+#tc-settings .tc-notice .tc-held { margin: 0 2px; }
 
 #tc-settings .tc-help {
   max-width: 62ch;
@@ -4345,22 +4451,10 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
 
 /* --------------------------------------------------------- reading mode -- */
 
-html.tc-reading [role="main"],
-html.tc-reading .qaContentMainColumn {
-  max-width: var(--tc-reading-width) !important;
-  margin-inline: auto !important;
-}
-
-html.tc-reading [role="article"],
-html.tc-reading .qaThreadStarter,
-html.tc-reading .y-fixedGridColumn { line-height: 1.5; }
-
-html.tc-no-rails [role="complementary"],
-html.tc-no-rails aside[aria-label] { display: none !important; }
-
 /*
- * The sticky app bar. Off by default: it takes search, the app launcher and
- * the account menu with it, which is a real loss, so it is the reader's call.
+ * Reading mode is mostly other features' settings, overridden. The one thing
+ * it draws itself is the app bar going away. Search, the app launcher and the
+ * account menu go with it, which is why there is a setting to keep it.
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
@@ -4420,9 +4514,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.5.10" : "0.0.0-dev";
+  var VERSION = true ? "1.0.6.11" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "c3bcb94" : "dev";
+  var BUILD = true ? "9c10b27" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -4456,12 +4550,14 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       quietChrome
     });
     const features = [
+      // First, so its overrides are in place before anything else reads a
+      // setting; otherwise the page would briefly render without them.
+      readingMode,
       expander,
       translate,
       declutter,
       highlighter,
       quietChrome,
-      readingMode,
       copyTools,
       toaster,
       panel,

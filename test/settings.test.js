@@ -58,11 +58,11 @@ describe('coercion', () => {
 
 describe('persistence', () => {
   it('survives a reload', () => {
-    settings.update({ 'reading.enabled': true, 'reading.maxWidth': 900 });
+    settings.update({ 'reading.enabled': true, 'expand.settleDelayMs': 900 });
     settings.load();
 
     expect(settings.get('reading.enabled')).toBe(true);
-    expect(settings.get('reading.maxWidth')).toBe(900);
+    expect(settings.get('expand.settleDelayMs')).toBe(900);
   });
 
   it('ignores stored keys that no longer exist', () => {

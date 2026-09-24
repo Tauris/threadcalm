@@ -48,7 +48,7 @@ per-page click limit has been reached.
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
-| <kbd>r</kbd> | Toggle reading mode |
+| <kbd>r</kbd> | Reading mode on or off |
 | <kbd>t</kbd> | Cycle the translation-control mode |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>s</kbd> | Open settings |
@@ -191,11 +191,29 @@ lets focus reveal it at all, so Like, Reply and the composer all stay reachable 
 
 ## Reading mode
 
-<kbd>r</kbd>. Narrows the column to a set width, tightens line spacing, and optionally hides the
-side rails and the sticky app bar.
+<kbd>r</kbd> switches the page into a quiet state in one step, and the same key switches it back.
+While it is on:
 
-Hiding the app bar reclaims real estate but takes search, the app launcher and the account menu
-with it, so it is off by default.
+| | Reading mode sets | unless you already chose |
+|---|---|---|
+| Like / Comment / Share bar | Corner cluster on hover | Corner cluster, keyboard only |
+| Inline comment and reply boxes | hidden | — |
+| Copy buttons on posts | only when tabbing into a post | never |
+| "Show translation" control | compact icon | hide when I read it, always hide |
+| Sponsored and suggested cards | hidden | — |
+| The app bar at the top | hidden | *Keep the app bar in reading mode* |
+
+It only ever makes the page quieter. Where your own choice is already at least as quiet, reading
+mode leaves it alone.
+
+**It never changes your settings.** It holds those settings quieter for as long as it is on, and
+switching it off hands back exactly what you had. While it is on, the settings sheet still shows and
+edits *your* values; a row it is holding is tagged **Reading mode**, and anything you change there
+takes effect once reading mode is off. The panel shows a **Reading** pill while it is on, which is
+also a way out of it.
+
+Hiding the app bar takes search, the app launcher and the account menu with it. If you need those
+while reading, switch on *Keep the app bar in reading mode*.
 
 ## Clutter
 
@@ -317,10 +335,8 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 
 | Setting | Default |
 |---|---|
-| Compact reading mode | off |
-| Reading column width | 760 px |
-| Hide side rails in reading mode | on |
-| Hide the top app bar in reading mode | off |
+| Reading mode | off |
+| Keep the app bar in reading mode | off |
 
 ### Clutter, highlighting, copying, keyboard
 

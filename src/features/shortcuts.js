@@ -253,7 +253,11 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
         break;
       }
       case 'r':
-        toast(readingMode.toggle() ? 'Reading mode on' : 'Reading mode off');
+        toast(
+          readingMode.toggle()
+            ? 'Reading mode on \u2014 quieter page. r to return to your own settings.'
+            : 'Reading mode off \u2014 your own settings are back.',
+        );
         break;
       case 't':
         cycleTranslateMode();

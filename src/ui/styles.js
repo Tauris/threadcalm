@@ -59,7 +59,6 @@ export const STYLES = `
   /* Also used inside posts. */
   --tc-new: #2f6f68;
   --tc-unanswered: #c19c00;
-  --tc-reading-width: 760px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -263,6 +262,22 @@ export const STYLES = `
   text-transform: uppercase;
 }
 
+/* On while reading mode is on; also its off switch. */
+#tc-panel .tc-mode-pill {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent);
+  font: 650 10px/1 var(--tc-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background-color .12s ease;
+}
+
+#tc-panel .tc-mode-pill:hover { background: var(--tc-accent-ring); }
+#tc-panel .tc-mode-pill[hidden] { display: none; }
+
 #tc-panel .tc-row {
   display: flex;
   align-items: center;
@@ -428,6 +443,32 @@ export const STYLES = `
   color: var(--tc-fg);
   font-weight: 500;
 }
+
+#tc-settings .tc-held {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  vertical-align: 1px;
+}
+
+#tc-settings .tc-notice {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--tc-accent-ring);
+  border-radius: 10px;
+  background: var(--tc-accent-soft);
+  color: var(--tc-fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+#tc-settings .tc-notice .tc-held { margin: 0 2px; }
 
 #tc-settings .tc-help {
   max-width: 62ch;
@@ -1307,22 +1348,10 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
 
 /* --------------------------------------------------------- reading mode -- */
 
-html.tc-reading [role="main"],
-html.tc-reading .qaContentMainColumn {
-  max-width: var(--tc-reading-width) !important;
-  margin-inline: auto !important;
-}
-
-html.tc-reading [role="article"],
-html.tc-reading .qaThreadStarter,
-html.tc-reading .y-fixedGridColumn { line-height: 1.5; }
-
-html.tc-no-rails [role="complementary"],
-html.tc-no-rails aside[aria-label] { display: none !important; }
-
 /*
- * The sticky app bar. Off by default: it takes search, the app launcher and
- * the account menu with it, which is a real loss, so it is the reader's call.
+ * Reading mode is mostly other features' settings, overridden. The one thing
+ * it draws itself is the app bar going away. Search, the app launcher and the
+ * account menu go with it, which is why there is a setting to keep it.
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
