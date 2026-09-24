@@ -15,6 +15,8 @@ const TEXT_ATTRIBUTES = [
   'data-track-name',
 ];
 
+import { counters } from './stats.js';
+
 const WHITESPACE = /\s+/g;
 
 /** Collapses whitespace and trims, the form every matcher expects. */
@@ -36,15 +38,50 @@ export function visibleText(element) {
   return element.innerText ?? element.textContent ?? '';
 }
 
-/** All strings that could reasonably name an element, cheapest first. */
-export function accessibleTexts(element) {
+/**
+ * How much raw text an element may hold before its rendered text is worth
+ * computing, as a multiple of the caller's label limit.
+ *
+ * `textContent` is free; `innerText` flushes layout. The two differ only by
+ * what is hidden, so an element carrying ten times more raw text than a label
+ * could possibly be is prose, and asking the browser to lay it out to discover
+ * that costs a reflow for nothing.
+ */
+const RAW_TEXT_BUDGET = 10;
+
+/**
+ * All strings that could reasonably name an element, cheapest first.
+ *
+ * `maxLength` is the longest label the caller will accept. Passing it lets the
+ * cheap check run first and skip the expensive one entirely, which on a long
+ * feed is the difference between a handful of reflows per scan and one per
+ * element -- every span in the document, several times a second.
+ *
+ * @param {Element} element
+ * @param {object} [options]
+ * @param {number} [options.maxLength] longest label worth reading
+ */
+export function accessibleTexts(element, { maxLength = Infinity } = {}) {
   if (!(element instanceof HTMLElement)) return [];
-  const texts = [visibleText(element)];
+
+  const texts = [];
+  const budget = maxLength * RAW_TEXT_BUDGET;
+  if (!Number.isFinite(budget) || (element.textContent?.length ?? 0) <= budget) {
+    counters.layoutReads += 1;
+    texts.push(visibleText(element));
+  } else {
+    counters.layoutSkips += 1;
+  }
+
   for (const attribute of TEXT_ATTRIBUTES) {
     const value = element.getAttribute(attribute);
     if (value) texts.push(value);
   }
-  return texts.filter(Boolean).map(normalizeText).filter((text) => text.length > 0);
+
+  const named = texts.filter(Boolean).map(normalizeText).filter((text) => text.length > 0);
+  return Number.isFinite(maxLength)
+    ? named.filter((text) => text.length <= maxLength)
+    : named;
 }
 
 /** True when the element occupies space and is not hidden from assistive tech. */

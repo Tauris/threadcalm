@@ -183,9 +183,7 @@ export function createQuietChrome() {
       for (const element of root.querySelectorAll(COMPOSER_SELECTOR)) {
         // accessibleTexts() covers visible descendant text as well as the
         // naming attributes, which is what finds the collapsed reply button.
-        const names = accessibleTexts(element).filter(
-          (text) => text.length <= MAX_LABEL_LENGTH,
-        );
+        const names = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
         if (!names.some((name) => COMPOSER_LABELS.some((pattern) => pattern.test(name)))) {
           continue;
         }

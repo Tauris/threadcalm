@@ -5,6 +5,71 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-09-24
+
+### Changed
+
+- **The script's own windows have a design, rather than native controls with borders added.** The
+  panel, the settings sheet, the shortcut overlay and the toasts share one set of tokens, built on
+  the teal of the script's icon instead of borrowed Engage blue, so they read as a tool of their
+  own rather than a broken piece of the page. The settings sheet now has a header with a close
+  button, a scrolling body of grouped rows and a footer that keeps *Done* in reach; switches, pill
+  toggles and spinner-free number fields replace the native controls.
+- **The copy and link buttons are icons, stacked, and clear of the reactions.** They were two text
+  boxes side by side at the top of the post, covering the lower part of the reaction emojis Engage
+  draws across a post's top-right edge. They are now a narrow vertical stack that starts below the
+  reactions and sits in the post's own right-hand padding rather than over its text, sharing a
+  right edge with the action-bar cluster.
+- **Controls drawn inside a post take their colour from the post.** The copy buttons and the
+  action-bar cluster used the system colour `Canvas`, which follows the page's *declared* colour
+  scheme; a page that paints itself dark without declaring it still gets a white `Canvas`, so they
+  would have shown as white blobs on a dark Engage. The buttons now inherit the post's own text
+  colour, and the cluster sits on translucent neutral grey over a blur, which reads in either
+  theme.
+- **Choices that are trade-offs are now cards.** Each option shows what it gains and what it costs,
+  so the comparison happens where the choice is made rather than in a legend under a dropdown.
+- **Native controls follow the theme.** Nothing declared `color-scheme`, so a dark sheet had its
+  number spinners, dropdown lists and scrollbars drawn in the light theme, as white blobs.
+- Languages without a label pack are named in their own language — *Português*, *Dansk*,
+  *Svenska*, *Polski* — instead of by code.
+- The panel's status line alone is announced to screen readers, rather than every button in the
+  panel.
+
+### Added
+
+- **A *Copy diagnostics* button in the settings sheet**, and an activity section in the report it
+  produces: seconds running, scans, controls examined, layout reads, elements on the page, and how
+  long since the last scan. A memory graph sawtooths as the collector runs and so cannot tell you
+  whether anything is wrong; two copies of this taken minutes apart can, because on an idle page
+  the counters should barely move. The same report was already available from the userscript
+  manager's menu, which is not where someone worried about a runaway would think to look.
+
+### Fixed
+
+- **The script grew heavier the longer a tab stayed open, until the browser was swamped.** Not one
+  leak but three faults that compounded, each harmless alone and ruinous together on a long feed
+  left running overnight.
+
+  - *Every candidate control was laid out to read its name.* `accessibleTexts()` called
+    `innerText`, which flushes layout, on every `button`, `a`, `span` and `[role="button"]` in the
+    document — and it did so before checking whether the text could possibly be a label, so a span
+    holding a whole post body was rendered to a string only to be discarded for being too long.
+    Five features do this on every sweep. It now checks `textContent`, which is free, and skips
+    the expensive read for anything holding more raw text than a label could plausibly be.
+  - *The heartbeat never stopped.* Once a thread was fully open the script kept rescanning the
+    whole document every second regardless, forever. It now scans when something has actually
+    changed, and once settled falls back to one check in ten beats — keeping the safety net for
+    replies that arrive without a reportable mutation, at a tenth of the cost.
+  - *The script reacted to its own writing.* The mutation observer did not exclude this script's
+    own elements, so the status panel rewriting "Expanding… 12 items" counted as page activity:
+    that ran every feature's sweep, which reported progress, which rewrote the panel. The same
+    applied to the copy chip being removed by a React re-render and put back. Both loops now stop
+    at the observer.
+
+  Together these meant a feed that never stopped growing was being rescanned several times a
+  second, with a forced reflow per element, on a main thread too busy for the collector to keep
+  up.
+
 ## [1.0.3] - 2026-09-23
 
 ### Added
@@ -161,6 +226,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.4]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.1

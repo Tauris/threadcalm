@@ -48,9 +48,25 @@ const languageOptions = AVAILABLE_LANGUAGES.map((code) => ({
   label: LANGUAGE_NAMES[code],
 }));
 
+/**
+ * A language's name in that language: "Português", "Dansk".
+ *
+ * Some detectable languages have no label pack, so no name of our own; the
+ * browser already knows them all, and in the form a speaker would look for.
+ */
+function endonym(code) {
+  try {
+    const name = new Intl.DisplayNames([code], { type: 'language' }).of(code);
+    if (name && name !== code) return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
+  } catch {
+    // An engine without Intl.DisplayNames falls through to the code.
+  }
+  return code.toUpperCase();
+}
+
 const detectableOptions = DETECTABLE_LANGUAGES.map((code) => ({
   value: code,
-  label: LANGUAGE_NAMES[code] ?? code.toUpperCase(),
+  label: LANGUAGE_NAMES[code] ?? endonym(code),
 }));
 
 /** @type {SettingDefinition[]} */

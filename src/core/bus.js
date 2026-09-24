@@ -51,4 +51,5 @@ export const EVENTS = {
   EXPAND_STATE: 'expand-state',
   TOAST: 'toast',
   SHOW_HELP: 'show-help',
+  COPY_DIAGNOSTICS: 'copy-diagnostics',
 };

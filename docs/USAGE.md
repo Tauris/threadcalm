@@ -354,8 +354,20 @@ the script was not injected: check that the userscript manager itself is enabled
 extension may read data on `engage.cloud.microsoft`.
 
 **It loads but finds nothing.** Look for a warning reading `no posts recognised on this page`. That
-means Engage's markup has changed. Use *Copy layout diagnostics* from the menu and open an issue
-with the result — it reports selector counts and box metrics, and no post text.
+means Engage's markup has changed. Use **Copy diagnostics** in the settings sheet — or *Copy layout
+diagnostics* from the userscript manager's menu — and open an issue with the result. It reports
+selector counts, box metrics and activity counters, and no post text.
+
+**It feels like it is doing something when it should be idle.** The diagnostics report ends with an
+activity section: seconds running, scans, controls examined, layout reads, elements on the page,
+and seconds since the last scan. Copy it, wait a few minutes on a page you are not touching, and
+copy it again. On an idle page the first four should barely move. A rising element count means the
+page itself is still growing, which is expansion working rather than anything wrong.
+
+A browser's own memory graph cannot answer this, because it rises and falls as the collector runs.
+If you want to check memory directly, use `about:memory` in Firefox: click **Minimize memory
+usage**, then **Measure**, and compare the same figure an hour later — the level after collection
+is the one that means anything.
 
 **Reply counters work, but pagination or `See more` does not.** Those are still matched by
 wording. Add your language under *Interface languages to recognise*, or add a pattern under

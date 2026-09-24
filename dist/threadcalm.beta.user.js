@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.0.3.4
+// @version     1.0.4.8
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.0.3.4
+ * Threadcalm (beta) v1.0.4.8
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -85,8 +85,45 @@
     EXPAND_PROGRESS: "expand-progress",
     EXPAND_STATE: "expand-state",
     TOAST: "toast",
-    SHOW_HELP: "show-help"
+    SHOW_HELP: "show-help",
+    COPY_DIAGNOSTICS: "copy-diagnostics"
   };
+
+  // src/core/stats.js
+  var counters = {
+    /** `innerText` reads. Each one flushes layout. */
+    layoutReads: 0,
+    /** Elements skipped by the cheap text check, so never laid out. */
+    layoutSkips: 0,
+    /** Expander scans, each of which classifies every candidate control. */
+    scans: 0,
+    /** Elements a scan looked at, summed over all scans. */
+    candidates: 0,
+    /** Feature sweeps, triggered by a reported DOM change or navigation. */
+    sweeps: 0
+  };
+  var startedAt = Date.now();
+  var lastScanAt = 0;
+  function noteScan(candidates = 0) {
+    counters.scans += 1;
+    counters.candidates += candidates;
+    lastScanAt = Date.now();
+  }
+  function snapshot() {
+    const now = Date.now();
+    let domNodes = -1;
+    try {
+      domNodes = document.getElementsByTagName("*").length;
+    } catch {
+      domNodes = -1;
+    }
+    return {
+      ...counters,
+      domNodes,
+      uptimeSeconds: Math.round((now - startedAt) / 1e3),
+      sinceLastScanSeconds: lastScanAt ? Math.round((now - lastScanAt) / 1e3) : null
+    };
+  }
 
   // src/core/dom.js
   var TEXT_ATTRIBUTES = [
@@ -104,14 +141,23 @@
     if (!element) return "";
     return element.innerText ?? element.textContent ?? "";
   }
-  function accessibleTexts(element) {
+  var RAW_TEXT_BUDGET = 10;
+  function accessibleTexts(element, { maxLength = Infinity } = {}) {
     if (!(element instanceof HTMLElement)) return [];
-    const texts = [visibleText(element)];
+    const texts = [];
+    const budget = maxLength * RAW_TEXT_BUDGET;
+    if (!Number.isFinite(budget) || (element.textContent?.length ?? 0) <= budget) {
+      counters.layoutReads += 1;
+      texts.push(visibleText(element));
+    } else {
+      counters.layoutSkips += 1;
+    }
     for (const attribute of TEXT_ATTRIBUTES) {
       const value = element.getAttribute(attribute);
       if (value) texts.push(value);
     }
-    return texts.filter(Boolean).map(normalizeText).filter((text) => text.length > 0);
+    const named = texts.filter(Boolean).map(normalizeText).filter((text) => text.length > 0);
+    return Number.isFinite(maxLength) ? named.filter((text) => text.length <= maxLength) : named;
   }
   function isVisible(element) {
     if (!(element instanceof HTMLElement)) return false;
@@ -135,12 +181,12 @@
   function nearestClickable(element, boundary) {
     if (!(element instanceof HTMLElement)) return null;
     if (element.matches(INTERACTIVE_SELECTOR)) return element;
-    let node = element.parentElement;
+    let node2 = element.parentElement;
     let depth = 0;
-    while (node && depth < 6) {
-      if (boundary && node === boundary) break;
-      if (node.matches(INTERACTIVE_SELECTOR)) return node;
-      node = node.parentElement;
+    while (node2 && depth < 6) {
+      if (boundary && node2 === boundary) break;
+      if (node2.matches(INTERACTIVE_SELECTOR)) return node2;
+      node2 = node2.parentElement;
       depth += 1;
     }
     return element;
@@ -164,11 +210,11 @@
   }
   function postContainerFor(actionRow) {
     if (!(actionRow instanceof HTMLElement)) return null;
-    let node = actionRow.parentElement;
+    let node2 = actionRow.parentElement;
     let depth = 0;
-    while (node && depth < 8) {
-      if (node.matches(POST_SELECTOR)) return node;
-      node = node.parentElement;
+    while (node2 && depth < 8) {
+      if (node2.matches(POST_SELECTOR)) return node2;
+      node2 = node2.parentElement;
       depth += 1;
     }
     return actionRow.parentElement;
@@ -206,22 +252,22 @@
     return debounced;
   }
   function el(tag, options = {}, ...children) {
-    const node = document.createElement(tag);
+    const node2 = document.createElement(tag);
     const { className, text, html, dataset, style, on, ...attributes } = options;
-    if (className) node.className = className;
-    if (text != null) node.textContent = String(text);
-    if (html != null) node.innerHTML = html;
-    if (dataset) Object.assign(node.dataset, dataset);
-    if (style) Object.assign(node.style, style);
+    if (className) node2.className = className;
+    if (text != null) node2.textContent = String(text);
+    if (html != null) node2.innerHTML = html;
+    if (dataset) Object.assign(node2.dataset, dataset);
+    if (style) Object.assign(node2.style, style);
     for (const [key, value] of Object.entries(attributes)) {
       if (value === false || value == null) continue;
-      node.setAttribute(key, value === true ? "" : String(value));
+      node2.setAttribute(key, value === true ? "" : String(value));
     }
     for (const [event, handler] of Object.entries(on ?? {})) {
-      node.addEventListener(event, handler);
+      node2.addEventListener(event, handler);
     }
-    node.append(...children.filter((child) => child != null));
-    return node;
+    node2.append(...children.filter((child) => child != null));
+    return node2;
   }
   function isEditingContext(target = document.activeElement) {
     if (!(target instanceof HTMLElement)) return false;
@@ -546,9 +592,17 @@
     value: code,
     label: LANGUAGE_NAMES[code]
   }));
+  function endonym(code) {
+    try {
+      const name = new Intl.DisplayNames([code], { type: "language" }).of(code);
+      if (name && name !== code) return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
+    } catch {
+    }
+    return code.toUpperCase();
+  }
   var detectableOptions = DETECTABLE_LANGUAGES.map((code) => ({
     value: code,
-    label: LANGUAGE_NAMES[code] ?? code.toUpperCase()
+    label: LANGUAGE_NAMES[code] ?? endonym(code)
   }));
   var SCHEMA = [
     // -- Thread expansion ----------------------------------------------------
@@ -1001,6 +1055,22 @@
   // src/core/spa.js
   var started = false;
   var lastUrl = "";
+  var OWN_UI_SELECTOR = "#tc-panel, #tc-toasts, #tc-settings, #tc-help";
+  var OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip`;
+  function elementOf(node2) {
+    if (!node2) return null;
+    return node2.nodeType === 1 ? node2 : node2.parentElement;
+  }
+  function isOwnNode(node2) {
+    const element = elementOf(node2);
+    return Boolean(element?.closest?.(OWN_NODE_SELECTOR));
+  }
+  function isOwnMutation(record) {
+    if (elementOf(record.target)?.closest?.(OWN_UI_SELECTOR)) return true;
+    if (record.type !== "childList") return false;
+    const touched = [...record.addedNodes, ...record.removedNodes];
+    return touched.length > 0 && touched.every(isOwnNode);
+  }
   function patchHistoryMethod(name, onCall) {
     const original = history[name];
     if (typeof original !== "function" || original.__threadcalmPatched) return;
@@ -1035,9 +1105,9 @@
     window.addEventListener("hashchange", announceNavigation);
     const poll = setInterval(announceNavigation, urlPollMs);
     const announceDomChange = debounce(() => bus.emit(EVENTS.DOM_CHANGED), domDebounceMs);
-    const observer = new MutationObserver(() => {
-      announceDomChange();
+    const observer = new MutationObserver((records) => {
       announceNavigation();
+      if (records.some((record) => !isOwnMutation(record))) announceDomChange();
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     return () => {
@@ -1051,6 +1121,82 @@
   }
   function isThreadView(url = location.href) {
     return /\/(?:threads?|conversations?)\/|[?&]threadId=/i.test(url);
+  }
+
+  // src/ui/icons.js
+  var SVG = "http://www.w3.org/2000/svg";
+  var ICONS = {
+    pause: [
+      ["path", { d: "M6 4v8M10 4v8" }]
+    ],
+    play: [
+      ["path", { d: "M5.5 3.8v8.4L12 8z", fill: "currentColor" }]
+    ],
+    settings: [
+      ["path", { d: "M2.5 5h7M12.5 5h1M2.5 11h1.5M7 11h6.5" }],
+      ["circle", { cx: "11", cy: "5", r: "1.6" }],
+      ["circle", { cx: "5.5", cy: "11", r: "1.6" }]
+    ],
+    help: [
+      ["circle", { cx: "8", cy: "8", r: "6" }],
+      ["path", { d: "M6.4 6.3a1.7 1.7 0 1 1 2.4 1.5c-.5.3-.8.6-.8 1.2" }],
+      ["circle", { cx: "8", cy: "11.1", r: ".55", fill: "currentColor", stroke: "none" }]
+    ],
+    close: [
+      ["path", { d: "M4.5 4.5l7 7M11.5 4.5l-7 7" }]
+    ],
+    copy: [
+      ["rect", { x: "5.5", y: "5.5", width: "7.5", height: "7.5", rx: "1.6" }],
+      ["path", { d: "M3 10.5V4.6A1.6 1.6 0 0 1 4.6 3h5.9" }]
+    ],
+    link: [
+      ["path", { d: "M6.8 9.2l2.4-2.4" }],
+      ["path", { d: "M7.6 4.6l.8-.8a2.6 2.6 0 0 1 3.7 3.7l-.8.8" }],
+      ["path", { d: "M8.4 11.4l-.8.8a2.6 2.6 0 0 1-3.7-3.7l.8-.8" }]
+    ]
+  };
+  function node(tag, attributes) {
+    const element = document.createElementNS(SVG, tag);
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+    return element;
+  }
+  function icon(name) {
+    const svg = node("svg", {
+      viewBox: "0 0 16 16",
+      width: "16",
+      height: "16",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.5",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "aria-hidden": "true",
+      focusable: "false",
+      class: "tc-icon"
+    });
+    for (const [tag, attributes] of ICONS[name] ?? []) svg.append(node(tag, attributes));
+    return svg;
+  }
+  function brandMark() {
+    const svg = node("svg", {
+      viewBox: "0 0 40 40",
+      width: "16",
+      height: "16",
+      "aria-hidden": "true",
+      focusable: "false",
+      class: "tc-mark"
+    });
+    svg.append(node("rect", { width: "40", height: "40", rx: "10", fill: "#2f6f68" }));
+    const bars = node("g", {
+      transform: "translate(4 4)",
+      fill: "none",
+      stroke: "#fff",
+      "stroke-width": "2.4",
+      "stroke-linecap": "round"
+    });
+    for (const d of ["M5 8h22", "M11 16h16", "M17 24h10"]) bars.append(node("path", { d }));
+    svg.append(bars);
+    return svg;
   }
 
   // src/features/thread.js
@@ -1126,8 +1272,8 @@
         return { iso: new Date(parsed).toISOString(), display: normalizeText(title) };
       }
     }
-    for (const node of article.querySelectorAll("a, span")) {
-      const text = normalizeText(visibleText(node));
+    for (const node2 of article.querySelectorAll("a, span")) {
+      const text = normalizeText(visibleText(node2));
       if (text && text.length <= 24 && RELATIVE_TIME.test(text)) {
         return { iso: null, display: text };
       }
@@ -1162,7 +1308,7 @@
       '[aria-hidden="true"]'
     ];
     for (const selector of strip) {
-      for (const node of clone.querySelectorAll(selector)) node.remove();
+      for (const node2 of clone.querySelectorAll(selector)) node2.remove();
     }
     const lines = visibleText(clone).split("\n").map((line) => normalizeText(line)).filter(Boolean);
     const kept = lines.filter((line) => {
@@ -1337,32 +1483,40 @@
       return el(
         "div",
         { className: CHIP_CLASS, role: "group", "aria-label": "Threadcalm post actions" },
-        el("button", {
-          type: "button",
-          title: "Copy this thread (c)",
-          "aria-label": "Copy this thread",
-          text: "copy",
-          on: {
-            click: (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              copyThread(article);
+        el(
+          "button",
+          {
+            type: "button",
+            className: "tc-chip-btn",
+            title: "Copy this thread (c)",
+            "aria-label": "Copy this thread",
+            on: {
+              click: (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                copyThread(article);
+              }
             }
-          }
-        }),
-        el("button", {
-          type: "button",
-          title: "Copy a link to this thread (y)",
-          "aria-label": "Copy a link to this thread",
-          text: "link",
-          on: {
-            click: (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              copyLink(article);
+          },
+          icon("copy")
+        ),
+        el(
+          "button",
+          {
+            type: "button",
+            className: "tc-chip-btn",
+            title: "Copy a link to this thread (y)",
+            "aria-label": "Copy a link to this thread",
+            on: {
+              click: (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                copyLink(article);
+              }
             }
-          }
-        })
+          },
+          icon("link")
+        )
       );
     }
     function sweep() {
@@ -1435,7 +1589,7 @@
       for (const element of root.querySelectorAll("span, div, p, h1, h2, h3, h4, h5, h6")) {
         if (!(element instanceof HTMLElement)) continue;
         if (element.children.length > 0) continue;
-        const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH);
+        const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
         if (!texts.some((text) => active.promoted.test(text))) continue;
         const card = closestPost(element) ?? element.closest('[role="listitem"], li, section');
         if (!card || card.classList.contains(HIDDEN_CLASS)) continue;
@@ -1484,6 +1638,9 @@
     let totalClicks = 0;
     let quietPasses = 0;
     let limitReached = false;
+    let dirty = true;
+    let idleBeats = 0;
+    let scans = 0;
     let clicked = /* @__PURE__ */ new WeakSet();
     function publishState() {
       bus.emit(EVENTS.EXPAND_STATE, {
@@ -1513,7 +1670,7 @@
     function classify(element) {
       if (!(element instanceof HTMLElement)) return null;
       if (element.disabled || element.getAttribute("aria-disabled") === "true") return null;
-      const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH2);
+      const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH2 });
       if (isMenuLike(element, texts)) return null;
       if (isStructuralReplyCount(element)) {
         return isVisible(element) ? "reply-count" : null;
@@ -1534,7 +1691,9 @@
     function findControls(root = document) {
       const found = [];
       const seenTargets = /* @__PURE__ */ new Set();
+      let examined = 0;
       for (const element of root.querySelectorAll(CANDIDATE_SELECTOR)) {
+        examined += 1;
         const kind = classify(element);
         if (!kind) continue;
         const target = nearestClickable(element, closestPost(element));
@@ -1542,6 +1701,7 @@
         seenTargets.add(target);
         found.push({ kind, element, target });
       }
+      noteScan(examined);
       return found;
     }
     function clickBatch(root = document) {
@@ -1574,6 +1734,8 @@
     function scan() {
       scanTimer = null;
       if (!running || !inScope()) return;
+      dirty = false;
+      scans += 1;
       const clicks = clickBatch();
       if (clicks > 0) {
         quietPasses = 0;
@@ -1591,16 +1753,32 @@
       if (!running || scanTimer || !inScope()) return;
       scanTimer = setTimeout(scan, get("expand.scanDelayMs"));
     }
+    const IDLE_BEAT_INTERVAL = 10;
+    function beat() {
+      if (dirty || quietPasses < 3) {
+        idleBeats = 0;
+        schedule();
+        return;
+      }
+      idleBeats += 1;
+      if (idleBeats >= IDLE_BEAT_INTERVAL) {
+        idleBeats = 0;
+        schedule();
+      }
+    }
     function restartHeartbeat() {
       clearInterval(heartbeat);
       heartbeat = null;
+      idleBeats = 0;
       const interval = get("expand.heartbeatMs");
-      if (interval > 0) heartbeat = setInterval(schedule, interval);
+      if (interval > 0) heartbeat = setInterval(beat, interval);
     }
     function reset2() {
       totalClicks = 0;
       quietPasses = 0;
       limitReached = false;
+      dirty = true;
+      idleBeats = 0;
       clicked = /* @__PURE__ */ new WeakSet();
       publishState();
     }
@@ -1624,16 +1802,20 @@
         schedule();
       },
       onDomChanged() {
+        dirty = true;
+        idleBeats = 0;
         schedule();
       },
       onSettingsChanged(changed) {
         if ("expand.heartbeatMs" in changed) restartHeartbeat();
         if ("expand.maxTotalClicks" in changed) limitReached = false;
+        dirty = true;
         publishState();
         schedule();
       },
       /** Re-reads label packs after the user edits languages or patterns. */
       setMatchers(next) {
+        dirty = true;
         active = next;
         schedule();
       },
@@ -1668,7 +1850,7 @@
         return { totalClicks, paused, limitReached };
       },
       // Exposed for the test suite.
-      _internals: { classify, findControls }
+      _internals: { classify, findControls, beat, scanCount: () => scans }
     };
   }
 
@@ -1677,6 +1859,7 @@
   var NEW_CLASS = "tc-new";
   var STORAGE_KEY2 = "seen-posts";
   var MAX_SEEN = 3e3;
+  var MAX_LABEL_LENGTH3 = 40;
   function createHighlighter({ matchers }) {
     let active = matchers;
     let seen = new Set(loadSeen());
@@ -1694,7 +1877,7 @@
       if (article.querySelector(POST_SELECTOR)) return true;
       if (!active.replyCount) return false;
       for (const element of article.querySelectorAll('span, button, a, [role="button"]')) {
-        for (const text of accessibleTexts(element)) {
+        for (const text of accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH3 })) {
           const match = active.replyCount.exec(text);
           if (match && Number(match[1]) > 0) return true;
         }
@@ -1795,17 +1978,17 @@
   var OPENER_SELECTOR = 'button, [role="button"]';
   var COMPOSER_SELECTOR = `${EDITOR_SELECTOR}, ${OPENER_SELECTOR}`;
   var COMPOSER_WRAPPER_SELECTOR = 'form, [role="form"], [data-testid="focus-catcher-wrapper"]';
-  var MAX_LABEL_LENGTH3 = 40;
+  var MAX_LABEL_LENGTH4 = 40;
   var MAX_LONE_ANCESTORS = 2;
   function loneAncestors(element) {
     const found = [];
-    let node = element;
+    let node2 = element;
     for (let depth = 0; depth < MAX_LONE_ANCESTORS; depth += 1) {
-      const parent = node.parentElement;
+      const parent = node2.parentElement;
       if (!parent || parent === document.body || parent === document.documentElement) break;
       if (parent.children.length !== 1) break;
       found.push(parent);
-      node = parent;
+      node2 = parent;
     }
     return found;
   }
@@ -1833,9 +2016,7 @@
       if (get("quiet.composer")) {
         const wrappers = /* @__PURE__ */ new Map();
         for (const element of root.querySelectorAll(COMPOSER_SELECTOR)) {
-          const names = accessibleTexts(element).filter(
-            (text) => text.length <= MAX_LABEL_LENGTH3
-          );
+          const names = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH4 });
           if (!names.some((name) => COMPOSER_LABELS.some((pattern) => pattern.test(name)))) {
             continue;
           }
@@ -1993,6 +2174,7 @@
   // src/features/shortcuts.js
   var FOCUS_CLASS = "tc-focus";
   var OVERLAY_ID = "tc-help";
+  var KEY_CAPS = { Escape: "Esc" };
   var SEEN_KEY = "help-seen";
   var BINDINGS = [
     { keys: ["j"], label: "Next post" },
@@ -2074,13 +2256,34 @@
         el(
           "div",
           { className: "tc-help-card" },
-          el("p", { className: "tc-eyebrow" }, brandLink(el)),
-          el("h2", { text: "Keyboard shortcuts" }),
+          el(
+            "header",
+            { className: "tc-help-head" },
+            el(
+              "div",
+              {},
+              el("p", { className: "tc-eyebrow" }, brandMark(), brandLink(el)),
+              el("h2", { text: "Keyboard shortcuts" })
+            ),
+            // Esc and a click outside both close this, but neither is visible;
+            // a dialog should show its own way out.
+            el(
+              "button",
+              {
+                type: "button",
+                className: "tc-icon-btn",
+                title: "Close (Esc)",
+                "aria-label": "Close keyboard shortcuts",
+                on: { click: () => toggleHelp(false) }
+              },
+              icon("close")
+            )
+          ),
           el(
             "dl",
-            {},
+            { className: "tc-keys" },
             ...BINDINGS.flatMap((binding) => [
-              el("dt", {}, ...binding.keys.map((key) => el("kbd", { text: key }))),
+              el("dt", {}, ...binding.keys.map((key) => el("kbd", { text: KEY_CAPS[key] ?? key }))),
               el("dd", { text: binding.label })
             ])
           ),
@@ -2203,7 +2406,7 @@
   var ROW_CLASS = "tc-translate-row";
   var ROW_HIDDEN_CLASS = "tc-translate-row-hidden";
   var MARKER = "tcTranslate";
-  var MAX_LABEL_LENGTH4 = 40;
+  var MAX_LABEL_LENGTH5 = 40;
   function createTranslateTamer({ matchers }) {
     let active = matchers;
     const languageCache = /* @__PURE__ */ new WeakMap();
@@ -2218,7 +2421,7 @@
       return result;
     }
     function classify(element) {
-      const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH4);
+      const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH5 });
       if (texts.length === 0) return null;
       if (active.showOriginal && texts.some((text) => active.showOriginal.test(text))) {
         return "original";
@@ -2243,7 +2446,7 @@
         host.classList.toggle(ROW_HIDDEN_CLASS, hidden);
       }
       if (compact && !hidden && !element.hasAttribute("data-tc-title")) {
-        const label = accessibleTexts(element)[0];
+        const label = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH5 })[0];
         if (label) element.setAttribute("data-tc-title", label);
         if (!element.getAttribute("title") && label) element.setAttribute("title", label);
       }
@@ -2333,55 +2536,60 @@
     let pauseButton = null;
     let sheet = null;
     let unsubscribes = [];
+    function iconButton(name, label, onClick) {
+      return el(
+        "button",
+        {
+          type: "button",
+          className: "tc-icon-btn",
+          title: label,
+          "aria-label": label,
+          on: { click: onClick }
+        },
+        icon(name)
+      );
+    }
     function build() {
-      statusText = el("span", { className: "tc-status", text: "Watching for threads…" });
-      pauseButton = el("button", {
-        type: "button",
-        text: "Pause",
-        title: "Pause automatic expansion (e)",
-        on: { click: () => expander.togglePause() }
+      statusText = el("span", {
+        className: "tc-status",
+        role: "status",
+        "aria-live": "polite",
+        text: "Watching for threads…"
       });
+      pauseButton = iconButton("pause", "Pause automatic expansion (e)", () => expander.togglePause());
+      pauseButton.setAttribute("aria-pressed", "false");
       panel = el(
         "div",
-        { id: PANEL_ID, role: "status", "aria-live": "polite" },
-        // Build stamp first, so "which version is this?" is answered before
-        // anything else in the panel is read.
+        { id: PANEL_ID, role: "region", "aria-label": "Threadcalm" },
+        // Identity first: what this is, which build, and where it came from --
+        // the panel appears on a page nobody asked it to appear on.
         el(
           "div",
-          { className: `tc-build${channel === "stable" ? "" : " tc-build-pre"}` },
-          // The panel appears on a page nobody asked it to appear on, so it
-          // says what it is and links to where it came from.
+          { className: "tc-build" },
+          brandMark(),
           brandLink(el),
-          el("span", { text: ` ${buildLabel}`, title: "Version, channel and build stamp" })
+          channel === "stable" ? null : el("span", { className: "tc-chip-pre", text: channel }),
+          el("span", {
+            className: "tc-stamp",
+            text: `v${version} · ${stamp}`,
+            title: "Version and build stamp"
+          })
         ),
         el(
           "div",
           { className: "tc-row" },
           el("span", { className: "tc-dot", "aria-hidden": "true" }),
           statusText,
-          pauseButton,
-          el("button", {
-            type: "button",
-            text: "Settings",
-            title: "Open settings (s)",
-            on: { click: openSettings }
-          }),
-          // The only visible affordance for the shortcuts. Without it nobody
-          // discovers that pressing ? does anything.
-          el("button", {
-            type: "button",
-            text: "?",
-            title: "Keyboard shortcuts (?)",
-            "aria-label": "Show keyboard shortcuts",
-            on: { click: () => bus.emit(EVENTS.SHOW_HELP) }
-          }),
-          el("button", {
-            type: "button",
-            text: "×",
-            title: "Hide this panel (p)",
-            "aria-label": "Hide the Threadcalm panel",
-            on: { click: hide }
-          })
+          el(
+            "div",
+            { className: "tc-tools" },
+            pauseButton,
+            iconButton("settings", "Settings (s)", openSettings),
+            // The only visible affordance for the shortcuts. Without it nobody
+            // discovers that pressing ? does anything.
+            iconButton("help", "Keyboard shortcuts (?)", () => bus.emit(EVENTS.SHOW_HELP)),
+            iconButton("close", "Hide this panel (p)", hide)
+          )
         )
       );
       document.body.append(panel);
@@ -2404,14 +2612,21 @@
     function onProgress({ totalClicks, settled }) {
       const noun = `${totalClicks} item${totalClicks === 1 ? "" : "s"}`;
       setStatus(settled ? `Thread expanded — ${noun}` : `Expanding… ${noun}`);
+      panel?.classList.toggle("tc-busy", !settled);
     }
+    let shownPaused = null;
     function onState({ enabled, paused, totalClicks, limitReached }) {
       if (!panel) return;
       panel.classList.toggle("tc-paused", paused || !enabled);
       panel.classList.toggle("tc-limit", limitReached);
-      if (pauseButton) {
-        pauseButton.textContent = paused ? "Resume" : "Pause";
-        pauseButton.title = paused ? "Resume automatic expansion (e)" : "Pause automatic expansion (e)";
+      if (paused || !enabled || limitReached) panel.classList.remove("tc-busy");
+      if (pauseButton && shownPaused !== paused) {
+        shownPaused = paused;
+        const label = paused ? "Resume automatic expansion (e)" : "Pause automatic expansion (e)";
+        pauseButton.replaceChildren(icon(paused ? "play" : "pause"));
+        pauseButton.title = label;
+        pauseButton.setAttribute("aria-label", label);
+        pauseButton.setAttribute("aria-pressed", paused ? "true" : "false");
       }
       if (limitReached) {
         setStatus(`Click limit reached at ${totalClicks}`);
@@ -2421,51 +2636,127 @@
         setStatus("Expansion off");
       }
     }
+    function fieldId(definition) {
+      return `tc-field-${definition.key.replace(/[^a-z0-9]+/gi, "-")}`;
+    }
+    function splitUnit(label) {
+      const match = /^(.*?)\s*\((ms|px)\)$/.exec(label);
+      return match ? { text: match[1], unit: match[2] } : { text: label, unit: null };
+    }
+    function describe(definition, id) {
+      const { text } = splitUnit(definition.label);
+      return el(
+        "span",
+        { className: "tc-field-text" },
+        el("span", { className: "tc-label", id: `${id}-label`, text }),
+        definition.help ? el("span", { className: "tc-help", id: `${id}-help`, text: definition.help }) : null
+      );
+    }
     function renderField(definition) {
       const value = get(definition.key);
-      const help = definition.help ? el("p", { className: "tc-help", text: definition.help }) : null;
+      const id = fieldId(definition);
+      const describedBy = definition.help ? `${id}-help` : null;
       const commit = (next) => update({ [definition.key]: next });
       switch (definition.type) {
         case "boolean":
           return el(
-            "div",
-            { className: "tc-field" },
+            "label",
+            { className: "tc-field tc-field-inline" },
+            describe(definition, id),
             el(
-              "label",
-              {},
+              "span",
+              { className: "tc-control" },
               el("input", {
                 type: "checkbox",
+                className: "tc-vh",
                 checked: value ? "checked" : null,
+                "aria-labelledby": `${id}-label`,
+                "aria-describedby": describedBy,
                 on: { change: (event) => commit(event.target.checked) }
               }),
-              el("span", { text: definition.label })
-            ),
-            help
+              el("span", { className: "tc-switch", "aria-hidden": "true" })
+            )
           );
-        case "number":
+        case "number": {
+          const { unit } = splitUnit(definition.label);
           return el(
-            "div",
-            { className: "tc-field" },
+            "label",
+            { className: "tc-field tc-field-inline" },
+            describe(definition, id),
             el(
-              "label",
-              {},
-              el("span", { text: definition.label }),
+              "span",
+              { className: "tc-control" },
               el("input", {
                 type: "number",
                 value: String(value),
                 min: definition.min ?? null,
                 max: definition.max ?? null,
                 step: definition.step ?? 1,
+                inputmode: "decimal",
+                "aria-labelledby": unit ? `${id}-label ${id}-unit` : `${id}-label`,
+                "aria-describedby": describedBy,
                 on: { change: (event) => commit(event.target.value) }
+              }),
+              // Rendered even when empty, so every number field in the sheet
+              // shares one right edge whether or not it carries a unit.
+              el("span", {
+                className: "tc-unit",
+                id: unit ? `${id}-unit` : null,
+                "aria-hidden": unit ? null : "true",
+                text: unit ?? ""
               })
-            ),
-            help
+            )
           );
+        }
         case "select": {
+          const options = definition.options ?? [];
+          if (options.some((option) => option.gain || option.cost)) {
+            const cards = el("div", {
+              className: "tc-cards",
+              role: "radiogroup",
+              "aria-labelledby": `${id}-label`,
+              "aria-describedby": describedBy
+            });
+            for (const option of options) {
+              cards.append(
+                el(
+                  "label",
+                  { className: "tc-card" },
+                  el("input", {
+                    type: "radio",
+                    className: "tc-vh",
+                    name: id,
+                    value: option.value,
+                    checked: option.value === value ? "checked" : null,
+                    on: {
+                      change: (event) => {
+                        if (event.target.checked) commit(option.value);
+                      }
+                    }
+                  }),
+                  el(
+                    "span",
+                    { className: "tc-card-face" },
+                    el("span", { className: "tc-card-title", text: option.label }),
+                    option.gain ? el("span", { className: "tc-gain", text: option.gain }) : null,
+                    option.cost ? el("span", { className: "tc-cost", text: option.cost }) : null
+                  )
+                )
+              );
+            }
+            return el(
+              "div",
+              { className: "tc-field tc-field-stacked" },
+              describe(definition, id),
+              cards
+            );
+          }
           const select = el("select", {
+            "aria-labelledby": `${id}-label`,
+            "aria-describedby": describedBy,
             on: { change: (event) => commit(event.target.value) }
           });
-          for (const option of definition.options ?? []) {
+          for (const option of options) {
             select.append(
               el("option", {
                 value: option.value,
@@ -2474,39 +2765,29 @@
               })
             );
           }
-          const notes = (definition.options ?? []).some(
-            (option) => option.gain || option.cost
-          ) ? el(
-            "dl",
-            { className: "tc-option-notes" },
-            ...(definition.options ?? []).flatMap((option) => [
-              el("dt", { text: option.label }),
-              el(
-                "dd",
-                {},
-                option.gain ? el("span", { className: "tc-gain", text: option.gain }) : null,
-                option.cost ? el("span", { className: "tc-cost", text: option.cost }) : null
-              )
-            ])
-          ) : null;
           return el(
-            "div",
-            { className: "tc-field" },
-            el("label", {}, el("span", { text: definition.label }), select),
-            help,
-            notes
+            "label",
+            { className: "tc-field tc-field-inline" },
+            describe(definition, id),
+            el("span", { className: "tc-control" }, select)
           );
         }
         case "multiselect": {
           const chosen = new Set(value);
-          const choices = el("div", { className: "tc-choices" });
+          const pills = el("div", {
+            className: "tc-pills",
+            role: "group",
+            "aria-labelledby": `${id}-label`,
+            "aria-describedby": describedBy
+          });
           for (const option of definition.options ?? []) {
-            choices.append(
+            pills.append(
               el(
                 "label",
-                {},
+                { className: "tc-pill" },
                 el("input", {
                   type: "checkbox",
+                  className: "tc-vh",
                   checked: chosen.has(option.value) ? "checked" : null,
                   on: {
                     change: (event) => {
@@ -2516,35 +2797,32 @@
                     }
                   }
                 }),
-                el("span", { text: option.label })
+                el("span", { className: "tc-pill-face", text: option.label })
               )
             );
           }
           return el(
             "div",
-            { className: "tc-field" },
-            el("span", { text: definition.label }),
-            choices,
-            help
+            { className: "tc-field tc-field-stacked" },
+            describe(definition, id),
+            pills
           );
         }
         case "lines":
           return el(
             "div",
-            { className: "tc-field" },
-            el(
-              "label",
-              {},
-              el("span", { text: definition.label }),
-              el("textarea", {
-                spellcheck: "false",
-                on: {
-                  change: (event) => commit(event.target.value.split("\n"))
-                },
-                text: (value ?? []).join("\n")
-              })
-            ),
-            help
+            { className: "tc-field tc-field-stacked" },
+            describe(definition, id),
+            el("textarea", {
+              spellcheck: "false",
+              rows: "3",
+              "aria-labelledby": `${id}-label`,
+              "aria-describedby": describedBy,
+              on: {
+                change: (event) => commit(event.target.value.split("\n"))
+              },
+              text: (value ?? []).join("\n")
+            })
           );
         default:
           return null;
@@ -2563,55 +2841,80 @@
         link(LINKS.repository, "Source on GitHub")
       );
     }
+    function textButton(text, onClick, { variant = null, title = null } = {}) {
+      return el("button", {
+        type: "button",
+        className: variant ? `tc-btn tc-btn-${variant}` : "tc-btn",
+        text,
+        title,
+        on: { click: onClick }
+      });
+    }
     function buildSheet() {
-      const body = el(
-        "div",
-        { className: "tc-sheet", role: "document" },
+      const head = el(
+        "header",
+        { className: "tc-sheet-head" },
+        brandMark(),
         el("h2", {}, brandLink(el)),
-        el("p", { className: "tc-version", text: buildLabel })
+        el("span", { className: "tc-stamp", text: buildLabel }),
+        el("span", { className: "tc-spacer" }),
+        iconButton("close", "Close settings (Esc)", closeSettings)
       );
+      const content = el("div", { className: "tc-sheet-body" });
       for (const group of GROUPS) {
         const definitions = definitionsFor(group.id);
         if (definitions.length === 0) continue;
-        const fieldset = el("fieldset", {}, el("legend", { text: group.title }));
+        const titleId = `tc-group-${group.id}`;
+        const section = el(
+          "section",
+          { className: "tc-group", "aria-labelledby": titleId },
+          el("h3", { className: "tc-group-title", id: titleId, text: group.title })
+        );
         for (const definition of definitions) {
           const field = renderField(definition);
-          if (field) fieldset.append(field);
+          if (field) section.append(field);
         }
-        body.append(fieldset);
+        content.append(section);
       }
-      body.append(
+      const links = buildLinks();
+      if (links) content.append(links);
+      const foot = el(
+        "footer",
+        { className: "tc-sheet-foot" },
         el(
           "div",
-          { className: "tc-actions" },
-          el("button", {
-            type: "button",
-            text: "Forget seen posts",
-            title: 'Clear the local "new post" history',
-            on: {
-              click: () => {
-                highlighter?.forgetSeen?.();
-                bus.emit(EVENTS.TOAST, { message: "Seen-post history cleared" });
-              }
-            }
+          { className: "tc-foot-group" },
+          // The diagnostics report is the answer to "is it still working when
+          // it should be idle?", so it belongs where someone worried about that
+          // will actually look, not only in the manager's menu.
+          textButton("Copy diagnostics", () => bus.emit(EVENTS.COPY_DIAGNOSTICS), {
+            title: "Selector health and how hard the script has been working, for bug reports"
           }),
-          el("button", {
-            type: "button",
-            text: "Reset to defaults",
-            on: {
-              click: () => {
-                reset();
-                closeSettings();
-                openSettings();
-                bus.emit(EVENTS.TOAST, { message: "Settings reset" });
-              }
-            }
-          }),
-          el("button", { type: "button", text: "Close", on: { click: closeSettings } })
+          textButton(
+            "Forget seen posts",
+            () => {
+              highlighter?.forgetSeen?.();
+              bus.emit(EVENTS.TOAST, { message: "Seen-post history cleared" });
+            },
+            { title: 'Clear the local "new post" history' }
+          )
+        ),
+        el(
+          "div",
+          { className: "tc-foot-group" },
+          textButton(
+            "Reset to defaults",
+            () => {
+              reset();
+              closeSettings();
+              openSettings();
+              bus.emit(EVENTS.TOAST, { message: "Settings reset" });
+            },
+            { variant: "danger" }
+          ),
+          textButton("Done", closeSettings, { variant: "primary" })
         )
       );
-      const links = buildLinks();
-      if (links) body.append(links);
       return el(
         "div",
         {
@@ -2625,14 +2928,14 @@
             }
           }
         },
-        body
+        el("div", { className: "tc-sheet", role: "document" }, head, content, foot)
       );
     }
     function openSettings() {
       if (sheet) return true;
       sheet = buildSheet();
       document.body.append(sheet);
-      sheet.querySelector("input, select, textarea, button")?.focus();
+      (sheet.querySelector(".tc-sheet-body :is(input, select, textarea)") ?? sheet.querySelector("button"))?.focus();
       return true;
     }
     function closeSettings() {
@@ -2680,73 +2983,247 @@
 
   // src/ui/styles.js
   var STYLES = `
+/*
+ * Design tokens.
+ *
+ * The accent is the teal of the script's own icon, not Engage's blue: these
+ * windows belong to Threadcalm, and borrowing the host's colour made them read
+ * as a broken piece of Engage rather than as a tool of their own. Neutrals are
+ * tinted a fraction toward the same teal, which is what makes the set look
+ * chosen rather than defaulted.
+ *
+ * Fonts are the system's. The script makes no network requests, so a webfont
+ * is off the table; the character comes from weight, spacing, tabular figures
+ * and a monospace stamp instead.
+ */
 :root {
-  --tc-bg: #ffffff;
-  --tc-fg: #242424;
-  --tc-muted: #616161;
-  --tc-border: rgba(0, 0, 0, .14);
-  --tc-shadow: 0 4px 16px rgba(0, 0, 0, .16);
-  --tc-accent: #0f6cbd;
-  --tc-new: #0f6cbd;
+  --tc-bg: #fcfdfd;
+  --tc-inset: #eef3f2;
+  --tc-hover: #e5edeb;
+  --tc-fg: #162120;
+  --tc-muted: #566764;
+  --tc-faint: #879794;
+  --tc-line: rgba(22, 33, 32, .10);
+  --tc-line-strong: rgba(22, 33, 32, .20);
+  --tc-accent: #2f6f68;
+  --tc-accent-strong: #235650;
+  --tc-accent-fg: #ffffff;
+  --tc-accent-soft: rgba(47, 111, 104, .10);
+  --tc-accent-ring: rgba(47, 111, 104, .32);
+  --tc-warn: #b3261e;
+  --tc-warn-soft: rgba(179, 38, 30, .08);
+  --tc-shadow: 0 1px 2px rgba(15, 25, 24, .06), 0 8px 24px rgba(15, 25, 24, .12);
+  --tc-shadow-lg: 0 2px 6px rgba(15, 25, 24, .08), 0 24px 64px rgba(15, 25, 24, .24);
+  --tc-backdrop: rgba(12, 20, 19, .36);
+  --tc-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23566764' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --tc-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --tc-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Also used inside posts. */
+  --tc-new: #2f6f68;
   --tc-unanswered: #c19c00;
-  --tc-warn: #a4262c;
   --tc-reading-width: 760px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --tc-bg: #1f1f1f;
-    --tc-fg: #f5f5f5;
-    --tc-muted: #adadad;
-    --tc-border: rgba(255, 255, 255, .16);
-    --tc-shadow: 0 4px 16px rgba(0, 0, 0, .5);
-    --tc-accent: #62abf5;
-    --tc-new: #62abf5;
+    --tc-bg: #151b1b;
+    --tc-inset: #1d2525;
+    --tc-hover: #253030;
+    --tc-fg: #e3eae8;
+    --tc-muted: #9dada9;
+    --tc-faint: #6d7d7a;
+    --tc-line: rgba(227, 234, 232, .09);
+    --tc-line-strong: rgba(227, 234, 232, .18);
+    --tc-accent: #74bdb3;
+    --tc-accent-strong: #97d0c8;
+    --tc-accent-fg: #0c1716;
+    --tc-accent-soft: rgba(116, 189, 179, .14);
+    --tc-accent-ring: rgba(116, 189, 179, .40);
+    --tc-warn: #f2b8b5;
+    --tc-warn-soft: rgba(242, 184, 181, .10);
+    --tc-shadow: 0 1px 2px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .45);
+    --tc-shadow-lg: 0 2px 6px rgba(0, 0, 0, .35), 0 24px 64px rgba(0, 0, 0, .60);
+    --tc-backdrop: rgba(0, 0, 0, .50);
+    --tc-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%239dada9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --tc-new: #74bdb3;
     --tc-unanswered: #e8c547;
-    --tc-warn: #f1707b;
   }
 }
 
-/* ---------------------------------------------------------------- panel -- */
+/* ------------------------------------------------------------- surfaces -- */
 
+/*
+ * Everything the script draws as a window of its own.
+ *
+ * color-scheme is what fixes the native controls: without it the browser drew
+ * number spinners, dropdown lists and scrollbars in their light theme on a
+ * dark sheet, as white blobs. Declaring it lets them follow the same theme as
+ * the tokens above.
+ *
+ * The resets are defensive rather than stylistic. Engage styles bare buttons,
+ * headings and labels globally, and those rules reach into anything appended
+ * to its body.
+ */
+#tc-panel,
+#tc-settings,
+#tc-help,
+#tc-toasts {
+  color-scheme: light dark;
+  color: var(--tc-fg);
+  font: 13px/1.45 var(--tc-font);
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+:is(#tc-panel, #tc-settings, #tc-help, #tc-toasts) *,
+:is(#tc-panel, #tc-settings, #tc-help, #tc-toasts) *::before,
+:is(#tc-panel, #tc-settings, #tc-help, #tc-toasts) *::after {
+  box-sizing: border-box;
+}
+
+:is(#tc-panel, #tc-settings, #tc-help) :is(h2, h3, p, dl, dd) { margin: 0; }
+
+:is(#tc-panel, #tc-settings, #tc-help) button {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:is(#tc-panel, #tc-settings, #tc-help) :focus-visible {
+  outline: 2px solid var(--tc-accent);
+  outline-offset: 2px;
+}
+
+.tc-icon { display: block; flex: none; }
+.tc-mark { display: block; flex: none; }
+
+/*
+ * The project name. It links to the repository, but it reads as the title it
+ * is: inherited colour, underline only on hover.
+ */
+:is(#tc-panel, #tc-settings, #tc-help) .tc-brand {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+:is(#tc-panel, #tc-settings, #tc-help) .tc-brand:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tc-stamp {
+  color: var(--tc-faint);
+  font: 11px/1 var(--tc-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- buttons -- */
+
+:is(#tc-panel, #tc-settings, #tc-help) .tc-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tc-muted);
+  transition: background-color .12s ease, color .12s ease;
+}
+
+:is(#tc-panel, #tc-settings, #tc-help) .tc-icon-btn:hover {
+  background: var(--tc-hover);
+  color: var(--tc-fg);
+}
+
+:is(#tc-panel, #tc-settings, #tc-help) .tc-icon-btn:active { background: var(--tc-line-strong); }
+
+:is(#tc-panel, #tc-settings, #tc-help) .tc-icon-btn[aria-pressed="true"] {
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent);
+}
+
+#tc-settings .tc-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--tc-line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tc-fg);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+
+#tc-settings .tc-btn:hover { background: var(--tc-hover); }
+
+#tc-settings .tc-btn-primary {
+  border-color: transparent;
+  background: var(--tc-accent);
+  color: var(--tc-accent-fg);
+}
+
+#tc-settings .tc-btn-primary:hover { background: var(--tc-accent-strong); }
+
+#tc-settings .tc-btn-danger {
+  border-color: transparent;
+  color: var(--tc-warn);
+}
+
+#tc-settings .tc-btn-danger:hover { background: var(--tc-warn-soft); }
+
+/* ----------------------------------------------------------------- panel -- */
+
+/*
+ * Two lines: who this is, and what it is doing. The status dot sits in the
+ * same column as the mark above it and the status text starts where the name
+ * does, so the two lines read as one object rather than two stacked rows.
+ */
 #tc-panel {
   position: fixed;
   right: 16px;
   bottom: 16px;
   z-index: 2147483000;
+  display: grid;
+  gap: 4px;
   width: max-content;
-  max-width: min(380px, calc(100vw - 32px));
-  box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid var(--tc-border);
-  border-radius: 8px;
+  min-width: 260px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 10px 8px 8px 12px;
+  border: 1px solid var(--tc-line);
+  border-radius: 14px;
   background: var(--tc-bg);
-  color: var(--tc-fg);
   box-shadow: var(--tc-shadow);
-  font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-  opacity: .96;
 }
 
 #tc-panel[hidden] { display: none; }
 
-/*
- * The build stamp. Quiet for a release, and unmistakable for anything else,
- * because the question it answers only ever matters while testing.
- */
 #tc-panel .tc-build {
-  margin: 0 0 4px;
-  color: var(--tc-muted);
-  font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 4px;
+  font-size: 12.5px;
 }
 
-#tc-panel .tc-build-pre {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 4px;
+#tc-panel .tc-build .tc-mark { border-radius: 4px; }
+#tc-panel .tc-build .tc-stamp { margin-left: auto; }
+
+.tc-chip-pre {
+  padding: 3px 6px;
+  border-radius: 999px;
   background: var(--tc-unanswered);
-  color: #1f1f1f;
-  font-weight: 600;
+  color: #1b1600;
+  font: 650 10px/1 var(--tc-font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
 
 #tc-panel .tc-row {
@@ -2755,283 +3232,526 @@
   gap: 8px;
 }
 
-#tc-panel .tc-status {
-  flex: 1 1 auto;
-  min-width: 10ch;
-  color: var(--tc-fg);
-}
-
 #tc-panel .tc-dot {
-  width: 8px;
-  height: 8px;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 4.5px;
   border-radius: 50%;
   background: var(--tc-accent);
-  flex: 0 0 auto;
 }
 
-#tc-panel.tc-paused .tc-dot { background: var(--tc-muted); }
+#tc-panel.tc-busy .tc-dot { animation: tc-pulse 1.4s ease-in-out infinite; }
+#tc-panel.tc-paused .tc-dot { background: var(--tc-faint); }
 #tc-panel.tc-limit .tc-dot { background: var(--tc-warn); }
 
-#tc-panel button,
-#tc-settings button,
-#tc-settings select {
-  font: inherit;
-  color: var(--tc-fg);
-  background: transparent;
-  border: 1px solid var(--tc-border);
-  border-radius: 5px;
-  padding: 2px 7px;
-  cursor: pointer;
+#tc-panel .tc-status {
+  flex: 1 1 auto;
+  min-width: 12ch;
+  color: var(--tc-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
 }
 
-#tc-panel button:hover,
-#tc-settings button:hover { border-color: var(--tc-accent); }
+#tc-panel .tc-tools {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+}
 
-#tc-panel button:focus-visible,
-#tc-settings :focus-visible {
-  outline: 2px solid var(--tc-accent);
-  outline-offset: 1px;
+/* ----------------------------------------------------------- dialogs ---- */
+
+#tc-settings,
+#tc-help {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--tc-backdrop);
+  backdrop-filter: blur(2px);
+  animation: tc-fade .16s ease-out;
+}
+
+#tc-help { z-index: 2147483002; }
+
+#tc-settings .tc-sheet,
+#tc-help .tc-help-card {
+  border: 1px solid var(--tc-line);
+  border-radius: 16px;
+  background: var(--tc-bg);
+  box-shadow: var(--tc-shadow-lg);
+  animation: tc-rise .2s cubic-bezier(.2, .8, .2, 1);
 }
 
 /* ------------------------------------------------------------- settings -- */
 
-#tc-settings {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483001;
+/*
+ * Header, scrolling body, footer. The header and footer stay put so the way
+ * out -- the close button, and Done -- is never scrolled away.
+ */
+#tc-settings .tc-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(86vh, 820px);
+  overflow: hidden;
+}
+
+#tc-settings .tc-sheet-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, .35);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  gap: 10px;
+  padding: 14px 12px 14px 20px;
+  border-bottom: 1px solid var(--tc-line);
 }
 
-#tc-settings .tc-sheet {
-  width: min(620px, 100%);
-  max-height: min(80vh, 760px);
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 18px 20px 22px;
-  border-radius: 10px;
-  background: var(--tc-bg);
-  color: var(--tc-fg);
-  box-shadow: var(--tc-shadow);
+#tc-settings .tc-sheet-head .tc-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 
-#tc-settings h2 {
-  margin: 0 0 2px;
+#tc-settings .tc-sheet-head h2 {
   font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.01em;
 }
+
+#tc-settings .tc-spacer { flex: 1 1 auto; }
+
+#tc-settings .tc-sheet-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px 22px;
+  scrollbar-color: var(--tc-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+#tc-settings .tc-sheet-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--tc-line);
+}
+
+#tc-settings .tc-foot-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Groups are titled in the accent, which is what gives the long sheet its rhythm. */
+#tc-settings .tc-group { padding-top: 20px; }
+
+#tc-settings .tc-group-title {
+  margin-bottom: 2px;
+  color: var(--tc-accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* One row per setting, separated by hairlines rather than boxed. */
+#tc-settings .tc-field {
+  display: block;
+  padding: 12px 0;
+  border-top: 1px solid var(--tc-line);
+}
+
+#tc-settings .tc-group-title + .tc-field { border-top: 0; }
+
+#tc-settings .tc-field-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+#tc-settings .tc-field-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#tc-settings .tc-field-stacked .tc-field-text { margin-bottom: 10px; }
 
 /*
- * The project name, in every window this script opens.
- *
- * It is a link rather than a label so that anyone wondering what put a panel
- * on their Engage page can find out in one click. Styled to read as the title
- * it already was -- underlined only on hover -- because turning a heading a
- * different colour would make it look like a stray link rather than the name
- * of the thing they are looking at.
+ * 500, not something between 500 and 600: system fonts have no such weight,
+ * and the browser rounds it up to bold, which made every label shout.
  */
-#tc-panel .tc-build .tc-brand,
-#tc-settings h2 .tc-brand,
-#tc-help .tc-eyebrow .tc-brand {
-  color: inherit;
-  text-decoration: none;
-}
-
-#tc-panel .tc-build .tc-brand:hover,
-#tc-settings h2 .tc-brand:hover,
-#tc-help .tc-eyebrow .tc-brand:hover { text-decoration: underline; }
-
-#tc-help .tc-eyebrow {
-  margin: 0 0 2px;
-  color: var(--tc-muted);
-  font-size: 11px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-#tc-settings .tc-version {
-  margin: 0 0 14px;
-  color: var(--tc-muted);
-  font-size: 11px;
-}
-
-#tc-settings fieldset {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--tc-border);
-  border-radius: 8px;
-}
-
-#tc-settings legend {
-  padding: 0 4px;
-  color: var(--tc-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-
-#tc-settings .tc-field { margin: 8px 0; }
-
-#tc-settings .tc-field > label {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-#tc-settings .tc-field input[type="number"],
-#tc-settings .tc-field select,
-#tc-settings .tc-field textarea {
-  box-sizing: border-box;
-  padding: 3px 6px;
-  border: 1px solid var(--tc-border);
-  border-radius: 5px;
-  background: var(--tc-bg);
+#tc-settings .tc-label {
   color: var(--tc-fg);
-  font: inherit;
+  font-weight: 500;
 }
-
-#tc-settings .tc-field input[type="number"] { width: 9ch; }
-#tc-settings .tc-field textarea { width: 100%; min-height: 60px; resize: vertical; }
 
 #tc-settings .tc-help {
-  margin: 2px 0 0;
+  max-width: 62ch;
   color: var(--tc-muted);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#tc-settings .tc-control {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 /*
- * Trade-offs listed beside a choice that is a trade rather than a taste.
- * Marked with + and - rather than colour alone, so the distinction survives
- * both themes and a reader who cannot rely on hue.
+ * The native input stays in the document, focusable and labelled; only its
+ * appearance is handed to the element drawn beside it.
  */
-#tc-settings .tc-option-notes {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border: 1px solid var(--tc-border);
-  border-radius: 6px;
-  font-size: 11px;
-  line-height: 1.45;
+#tc-settings .tc-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
 }
 
-#tc-settings .tc-option-notes dt {
-  margin: 6px 0 1px;
-  font-weight: 600;
+/* Switch. */
+#tc-settings .tc-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--tc-line-strong);
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+
+#tc-settings .tc-switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .28);
+  transition: transform .15s ease;
+}
+
+#tc-settings .tc-vh:checked + .tc-switch { background: var(--tc-accent); }
+#tc-settings .tc-vh:checked + .tc-switch::before { transform: translateX(16px); }
+
+#tc-settings .tc-vh:focus-visible + :is(.tc-switch, .tc-card-face, .tc-pill-face) {
+  outline: 2px solid var(--tc-accent);
+  outline-offset: 2px;
+}
+
+/* Text inputs. */
+#tc-settings input[type="number"],
+#tc-settings select,
+#tc-settings textarea {
+  border: 1px solid var(--tc-line-strong);
+  border-radius: 8px;
+  background-color: var(--tc-inset);
   color: var(--tc-fg);
+  font: inherit;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
 
-#tc-settings .tc-option-notes dt:first-child { margin-top: 0; }
+#tc-settings input[type="number"]:hover,
+#tc-settings select:hover,
+#tc-settings textarea:hover { border-color: var(--tc-faint); }
 
-#tc-settings .tc-option-notes dd {
+#tc-settings input[type="number"]:focus,
+#tc-settings select:focus,
+#tc-settings textarea:focus {
+  border-color: var(--tc-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--tc-accent-ring);
+}
+
+/*
+ * Numbers without spinners. The spinners were the white blobs; the arrow keys
+ * still step the value, and a delay in milliseconds is typed, not clicked.
+ */
+#tc-settings input[type="number"] {
+  width: 92px;
+  height: 32px;
+  padding: 0 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+#tc-settings input[type="number"]::-webkit-inner-spin-button,
+#tc-settings input[type="number"]::-webkit-outer-spin-button {
   margin: 0;
+  -webkit-appearance: none;
+}
+
+#tc-settings .tc-unit {
+  width: 2.5ch;
+  color: var(--tc-faint);
+  font: 12px var(--tc-mono);
+}
+
+#tc-settings select {
+  height: 32px;
+  min-width: 200px;
+  max-width: 300px;
+  padding: 0 32px 0 10px;
+  background-image: var(--tc-chevron);
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 12px;
+  cursor: pointer;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+#tc-settings textarea {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  padding: 8px 10px;
+  font: 12px/1.5 var(--tc-mono);
+  resize: vertical;
+}
+
+/*
+ * Choices that are trades: a card per option, carrying what it gains and what
+ * it costs. Marked with + and a minus sign as well as colour, so the difference
+ * survives both themes and a reader who cannot rely on hue.
+ */
+#tc-settings .tc-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 8px;
+}
+
+#tc-settings .tc-card {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+#tc-settings .tc-card-face {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
+  flex-direction: column;
+  gap: 3px;
+  height: 100%;
+  padding: 10px 12px 11px 34px;
+  border: 1px solid var(--tc-line-strong);
+  border-radius: 10px;
+  background: var(--tc-bg);
+  transition: border-color .12s ease, background-color .12s ease, box-shadow .12s ease;
+}
+
+#tc-settings .tc-card-face::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--tc-line-strong);
+  border-radius: 50%;
+  background: var(--tc-bg);
+  transition: border-color .12s ease, border-width .12s ease;
+}
+
+#tc-settings .tc-card:hover .tc-card-face { border-color: var(--tc-faint); }
+
+#tc-settings .tc-vh:checked + .tc-card-face {
+  border-color: var(--tc-accent);
+  background: var(--tc-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--tc-accent);
+}
+
+#tc-settings .tc-vh:checked + .tc-card-face::before {
+  border-width: 4.5px;
+  border-color: var(--tc-accent);
+}
+
+#tc-settings .tc-card-title {
+  color: var(--tc-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+#tc-settings .tc-gain,
+#tc-settings .tc-cost {
+  display: flex;
+  gap: 6px;
   color: var(--tc-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
-#tc-settings .tc-option-notes .tc-gain::before {
-  content: "+ ";
-  color: var(--tc-accent);
+#tc-settings .tc-gain::before,
+#tc-settings .tc-cost::before {
+  flex: none;
+  width: .7em;
   font-weight: 700;
 }
 
-#tc-settings .tc-option-notes .tc-cost::before {
-  content: "− ";
-  color: var(--tc-warn);
-  font-weight: 700;
-}
+#tc-settings .tc-gain::before { content: "+"; color: var(--tc-accent); }
+#tc-settings .tc-cost::before { content: "−"; color: var(--tc-warn); }
 
-#tc-settings .tc-choices {
+/* Several-of-many choices: pills. */
+#tc-settings .tc-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 4px;
+  gap: 6px;
 }
 
-#tc-settings .tc-choices label {
+#tc-settings .tc-pill { cursor: pointer; }
+
+#tc-settings .tc-pill-face {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--tc-line-strong);
+  border-radius: 999px;
+  color: var(--tc-fg);
+  font-size: 12.5px;
+  transition: border-color .12s ease, background-color .12s ease, color .12s ease;
 }
 
-#tc-settings .tc-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 4px;
+#tc-settings .tc-pill:hover .tc-pill-face { border-color: var(--tc-faint); }
+
+#tc-settings .tc-vh:checked + .tc-pill-face {
+  border-color: var(--tc-accent);
+  background: var(--tc-accent-soft);
+  color: var(--tc-accent-strong);
+  font-weight: 500;
 }
 
-/* Project links. Present only when the repository is public. */
+#tc-settings .tc-vh:checked + .tc-pill-face::before {
+  content: "✓";
+  font-weight: 700;
+}
+
 #tc-settings .tc-links {
-  margin: 14px 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--tc-border);
-  color: var(--tc-muted);
-  font-size: 11px;
+  margin-top: 24px;
+  color: var(--tc-faint);
+  font-size: 12px;
   text-align: center;
 }
 
 #tc-settings .tc-links a,
 #tc-help .tc-help-note a {
   color: var(--tc-accent);
+  font-weight: 500;
   text-decoration: none;
 }
 
 #tc-settings .tc-links a:hover,
-#tc-help .tc-help-note a:hover { text-decoration: underline; }
+#tc-help .tc-help-note a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* ----------------------------------------------------------------- help -- */
 
-#tc-help {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483002;
+#tc-help .tc-help-card {
+  width: min(460px, 100%);
+  max-height: min(86vh, 720px);
+  overflow: auto;
+  padding: 18px 16px 20px 22px;
+  scrollbar-width: thin;
+}
+
+#tc-help .tc-help-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+#tc-help .tc-eyebrow {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, .35);
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--tc-accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
-#tc-help .tc-help-card {
-  min-width: 320px;
-  padding: 18px 22px;
-  border-radius: 10px;
-  background: var(--tc-bg);
-  color: var(--tc-fg);
-  box-shadow: var(--tc-shadow);
+#tc-help .tc-eyebrow .tc-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
 }
 
-#tc-help h2 { margin: 0 0 12px; font-size: 15px; }
+#tc-help h2 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
 
-#tc-help dl {
+#tc-help .tc-keys {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 14px;
-  margin: 0;
+  grid-template-columns: max-content 1fr;
+  padding-right: 6px;
 }
 
-#tc-help dt { margin: 0; }
-#tc-help dd { margin: 0; color: var(--tc-fg); }
+#tc-help .tc-keys dt,
+#tc-help .tc-keys dd {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  border-top: 1px solid var(--tc-line);
+}
+
+#tc-help .tc-keys dt:first-of-type,
+#tc-help .tc-keys dd:first-of-type { border-top: 0; }
+
+#tc-help .tc-keys dt {
+  gap: 4px;
+  padding-right: 18px;
+}
 
 #tc-help kbd {
-  display: inline-block;
-  min-width: 1.5em;
-  padding: 1px 5px;
-  border: 1px solid var(--tc-border);
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--tc-line-strong);
   border-bottom-width: 2px;
-  border-radius: 4px;
-  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-  text-align: center;
+  border-radius: 6px;
+  background: var(--tc-inset);
+  color: var(--tc-fg);
+  font: 600 11.5px/1 var(--tc-mono);
 }
 
 #tc-help .tc-help-note {
-  margin: 14px 0 0;
+  margin-top: 16px;
+  padding: 14px 6px 0 0;
+  border-top: 1px solid var(--tc-line);
   color: var(--tc-muted);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 /* ---------------------------------------------------------------- toast -- */
@@ -3039,31 +3759,86 @@
 #tc-toasts {
   position: fixed;
   right: 16px;
-  bottom: 70px;
+  bottom: 92px;
   z-index: 2147483003;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 8px;
   pointer-events: none;
 }
 
 #tc-toasts .tc-toast {
-  max-width: min(340px, calc(100vw - 32px));
-  padding: 7px 11px;
-  border: 1px solid var(--tc-border);
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 9px 14px 9px 12px;
+  border: 1px solid var(--tc-line);
+  border-radius: 12px;
   background: var(--tc-bg);
-  color: var(--tc-fg);
   box-shadow: var(--tc-shadow);
-  font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
   opacity: 0;
-  transform: translateY(4px);
+  transform: translateY(6px) scale(.98);
   transition: opacity .18s ease, transform .18s ease;
 }
 
-#tc-toasts .tc-toast.tc-in { opacity: .97; transform: none; }
-#tc-toasts .tc-toast.tc-warn { border-color: var(--tc-warn); color: var(--tc-warn); }
+#tc-toasts .tc-toast::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tc-accent);
+}
+
+#tc-toasts .tc-toast.tc-in {
+  opacity: 1;
+  transform: none;
+}
+
+#tc-toasts .tc-toast.tc-warn::before { background: var(--tc-warn); }
+
+/* ---------------------------------------------------------------- motion -- */
+
+@keyframes tc-fade { from { opacity: 0; } }
+
+@keyframes tc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.985);
+  }
+}
+
+@keyframes tc-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--tc-accent-ring); }
+  50% { box-shadow: 0 0 0 4px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tc-settings,
+  #tc-help,
+  #tc-settings .tc-sheet,
+  #tc-help .tc-help-card,
+  #tc-panel.tc-busy .tc-dot { animation: none; }
+
+  :is(#tc-panel, #tc-settings, #tc-help, #tc-toasts) *,
+  /* Blanket and therefore !important: it has to beat every transition above. */
+  :is(#tc-panel, #tc-settings, #tc-help, #tc-toasts) *::before { transition: none !important; }
+}
+
+/* Narrow windows: rows stack, dropdowns take the full width. */
+@media (max-width: 540px) {
+  #tc-settings { padding: 8px; }
+  #tc-settings .tc-field-inline { flex-wrap: wrap; gap: 8px; }
+  #tc-settings select {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+  #tc-panel { min-width: 0; }
+}
 
 /* ---------------------------------------------- translation compaction -- */
 
@@ -3198,9 +3973,9 @@ html.tc-quiet-collapse .tc-quiet-post [data-testid="overflow-set"] {
  * like a bar across the whole window. This is the case the !important
  * convention at the top of this file exists for.
  *
- * The ground is the CSS system colour rather than ours: these sit among
- * Engage's own icons and have to match the page those were drawn for, not this
- * script's panel palette.
+ * The ground is neutral translucent grey over a blur rather than any colour of
+ * ours: these sit among Engage's own icons and must suit whichever theme the
+ * page is showing, which neither our palette nor Canvas reliably knows.
  */
 html.tc-quiet-cluster .tc-quiet-post,
 html.tc-quiet-cluster-focus .tc-quiet-post,
@@ -3216,9 +3991,15 @@ html.tc-quiet-edge .tc-quiet-post [data-testid="overflow-set"] {
   margin: 0;
   opacity: 0;
   transition: opacity .12s ease;
-  background: Canvas;
+  /*
+   * Neutral and translucent, blurred behind: it sits over the post's text,
+   * and a fixed colour would be right for only one of Engage's themes.
+   */
   border: 1px solid rgba(128, 128, 128, .35);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  background: rgba(128, 128, 128, .14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .14);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
 }
 
 /*
@@ -3381,19 +4162,32 @@ html.tc-quiet-hidden .tc-quiet-post [data-testid="overflow-set"] {
  * layout, so the corner is a setting rather than a decision made here. The
  * default stays top-right; the class on <html> moves it.
  */
+/*
+ * Two icon buttons stacked vertically: 26px wide, so the stack sits in the
+ * post's own right-hand padding instead of reaching over its text.
+ *
+ * In the default corner it starts 16px down. Engage draws a post's reactions
+ * straddling its top-right edge, reaching about 10px into the post; the old
+ * text chip started at 4px and covered the lower part of them. 16px clears
+ * them with a small gap, and --tc-chip-top is the one number to move if a
+ * layout draws them lower.
+ */
 .tc-chip {
+  --tc-chip-top: 16px;
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: var(--tc-chip-top);
+  /* 8px, the same inset as the action cluster, so the two share a right edge. */
+  right: 8px;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   gap: 4px;
   opacity: 0;
   transition: opacity .12s ease;
 }
 
 html.tc-chip-top-left .tc-chip {
-  top: 4px;
+  top: 6px;
   bottom: auto;
   left: 4px;
   right: auto;
@@ -3401,16 +4195,16 @@ html.tc-chip-top-left .tc-chip {
 
 html.tc-chip-bottom-left .tc-chip {
   top: auto;
-  bottom: 4px;
-  left: 4px;
+  bottom: 6px;
+  left: 6px;
   right: auto;
 }
 
 html.tc-chip-bottom-right .tc-chip {
   top: auto;
-  bottom: 4px;
+  bottom: 6px;
   left: auto;
-  right: 4px;
+  right: 8px;
 }
 
 /*
@@ -3424,33 +4218,55 @@ html.tc-chip-hover .tc-post:hover .tc-chip { opacity: 1; }
 html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
 
 /*
- * The copy chip is drawn inside a post, so it has to match the page rather
- * than the operating system.
+ * The copy chip is drawn inside a post, so it has to match the post rather
+ * than the operating system -- and, it turns out, rather than Canvas too.
  *
- * --tc-bg and its neighbours come from prefers-color-scheme, which is the
- * browser's idea of light or dark. Engage has its own theme setting, and the
- * two disagree often: a dark OS with Engage in light mode turned this chip
- * into a black rectangle on a white post. Canvas and CanvasText resolve
- * against the colour scheme in force where the element is actually drawn, so
- * they follow Engage.
+ * Our palette follows prefers-color-scheme, the browser's theme, which Engage
+ * ignores in favour of its own setting; that once drew a black chip on a white
+ * post. Canvas and CanvasText fixed that for a light page, but they follow the
+ * page's declared color-scheme, and a page that paints itself dark without
+ * declaring it still gets a white Canvas: a white blob on a dark post.
  *
- * The rule that falls out, and that the action cluster above follows too:
- * anything this script draws *inside* Engage's content uses system colours;
- * the panel, the settings sheet and the toasts are our own floating surfaces
- * and keep our palette.
+ * The one colour guaranteed to contrast with a post is the colour of its own
+ * text. So the buttons inherit it, and everything else is neutral grey at low
+ * opacity, which reads on either background. No lookup, no guess about which
+ * theme is showing.
  */
-.tc-chip button {
-  padding: 1px 6px;
-  border: 1px solid rgba(128, 128, 128, .4);
-  border-radius: 4px;
-  background: Canvas;
-  color: CanvasText;
-  font: 10px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  letter-spacing: .02em;
+.tc-chip .tc-chip-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(128, 128, 128, .38);
+  border-radius: 8px;
+  background: rgba(128, 128, 128, .10);
+  color: inherit;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: background-color .12s ease, border-color .12s ease;
 }
 
-.tc-chip button:hover { color: var(--tc-accent); border-color: var(--tc-accent); }
+.tc-chip .tc-chip-btn .tc-icon {
+  width: 14px;
+  height: 14px;
+  opacity: .72;
+  transition: opacity .12s ease;
+}
+
+.tc-chip .tc-chip-btn:hover {
+  border-color: rgba(128, 128, 128, .65);
+  background: rgba(128, 128, 128, .20);
+}
+
+.tc-chip .tc-chip-btn:hover .tc-icon { opacity: 1; }
+
+.tc-chip .tc-chip-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 
 /* --------------------------------------------------------- reading mode -- */
 
@@ -3529,9 +4345,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.3.4" : "0.0.0-dev";
+  var VERSION = true ? "1.0.4.8" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "8e4796d" : "dev";
+  var BUILD = true ? "68e60f1" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -3583,6 +4399,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     };
     bus.on(EVENTS.NAVIGATE, (payload) => dispatch("onNavigate", payload));
     bus.on(EVENTS.DOM_CHANGED, () => dispatch("onDomChanged"));
+    bus.on(EVENTS.COPY_DIAGNOSTICS, () => {
+      copyDiagnostics();
+    });
     bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
       if (MATCHER_KEYS.some((key) => key in changed)) {
         matchers = buildMatchers(get("general.languages"), customPatterns());
@@ -3634,10 +4453,29 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     [".tc-quiet-post", "posts tagged by Threadcalm"],
     [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"]
   ];
+  function activityLines() {
+    const stats = snapshot();
+    const idle = stats.sinceLastScanSeconds;
+    return [
+      "",
+      "activity since load:",
+      `  ${String(stats.uptimeSeconds).padStart(7)}  seconds running`,
+      `  ${String(stats.scans).padStart(7)}  scans`,
+      `  ${String(stats.candidates).padStart(7)}  controls examined`,
+      `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
+      `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+      `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
+      `  ${String(idle === null ? "never" : idle).padStart(7)}  seconds since the last scan`,
+      "",
+      "On an idle page the first four should barely move between two readings",
+      "taken minutes apart. A rising element count means the page is still",
+      "growing, which is expansion working rather than anything leaking."
+    ];
+  }
   async function copyDiagnostics() {
     const control = document.querySelector(".tc-translate-compact, .tc-translate-hidden") ?? document.querySelector("[data-tc-title]");
     const lines = [
-      `Threadcalm ${VERSION}`,
+      `Threadcalm ${VERSION} (${CHANNEL} ${BUILD})`,
       `${navigator.userAgent}`,
       `host: ${location.host}`,
       "",
@@ -3652,29 +4490,30 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       }
       lines.push(`  ${String(count).padStart(4)}  ${label}  (${selector})`);
     }
-    lines.push("", `posts resolved: ${rootPosts().length}`, "");
+    lines.push("", `posts resolved: ${rootPosts().length}`);
+    lines.push(...activityLines(), "");
     if (!control) {
       lines.push("No translate control found on this page.");
     } else {
       lines.push("translate control, then ancestors:");
-      let node = control;
-      for (let depth = 0; node && depth < 6; depth += 1) {
-        const style = getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
+      let node2 = control;
+      for (let depth = 0; node2 && depth < 6; depth += 1) {
+        const style = getComputedStyle(node2);
+        const rect = node2.getBoundingClientRect();
         const describe = [
-          node.tagName.toLowerCase(),
-          node.getAttribute("role") ? `role=${node.getAttribute("role")}` : "",
+          node2.tagName.toLowerCase(),
+          node2.getAttribute("role") ? `role=${node2.getAttribute("role")}` : "",
           `display:${style.display}`,
           `${Math.round(rect.width)}x${Math.round(rect.height)}`,
           `pad:${style.paddingTop}/${style.paddingBottom}`,
           `margin:${style.marginTop}/${style.marginBottom}`,
           `minH:${style.minHeight}`,
-          `children:${node.children.length}`,
-          node.classList.contains("tc-translate-row") ? "[row-collapsed]" : "",
-          node.classList.contains("tc-translate-compact") ? "[compacted]" : ""
+          `children:${node2.children.length}`,
+          node2.classList.contains("tc-translate-row") ? "[row-collapsed]" : "",
+          node2.classList.contains("tc-translate-compact") ? "[compacted]" : ""
         ].filter(Boolean).join("  ");
         lines.push(`${"  ".repeat(depth)}${describe}`);
-        node = node.parentElement;
+        node2 = node2.parentElement;
       }
     }
     const report = lines.join("\n");

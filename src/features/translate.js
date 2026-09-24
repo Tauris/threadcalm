@@ -63,7 +63,7 @@ export function createTranslateTamer({ matchers }) {
 
   /** @returns {'translate'|'original'|null} */
   function classify(element) {
-    const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH);
+    const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
     if (texts.length === 0) return null;
     if (active.showOriginal && texts.some((text) => active.showOriginal.test(text))) {
       return 'original';
@@ -106,7 +106,7 @@ export function createTranslateTamer({ matchers }) {
 
     if (compact && !hidden && !element.hasAttribute('data-tc-title')) {
       // Preserve a hover hint, since the visible label is about to shrink.
-      const label = accessibleTexts(element)[0];
+      const label = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH })[0];
       if (label) element.setAttribute('data-tc-title', label);
       if (!element.getAttribute('title') && label) element.setAttribute('title', label);
     }

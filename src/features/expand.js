@@ -37,6 +37,7 @@ import {
 } from '../core/dom.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
+import { noteScan } from '../core/stats.js';
 import { isThreadView } from '../core/spa.js';
 
 /** Elements that could plausibly carry a label and receive a click. */
@@ -66,6 +67,22 @@ export function createExpander({ matchers }) {
   let totalClicks = 0;
   let quietPasses = 0;
   let limitReached = false;
+
+  /**
+   * Whether anything has changed since the last scan.
+   *
+   * A scan reads every candidate control in the document, so repeating one
+   * against a page that has not moved is pure waste -- and on a long feed it
+   * is expensive waste, several times a second, for as long as the tab is
+   * open. The heartbeat still runs, because lazily rendered replies can arrive
+   * without a mutation worth reporting, but once the thread has settled it
+   * checks occasionally rather than constantly.
+   */
+  let dirty = true;
+  let idleBeats = 0;
+
+  /** Scans performed, so a test can show the idle loop actually goes quiet. */
+  let scans = 0;
 
   // Element identity, not a selector, is what dedupes: Engage reuses labels
   // freely but a given DOM node only ever needs to be opened once. A WeakSet
@@ -119,7 +136,7 @@ export function createExpander({ matchers }) {
     if (!(element instanceof HTMLElement)) return null;
     if (element.disabled || element.getAttribute('aria-disabled') === 'true') return null;
 
-    const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH);
+    const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
     if (isMenuLike(element, texts)) return null;
 
     // Layer 1: structure, which holds in every interface language.
@@ -155,8 +172,10 @@ export function createExpander({ matchers }) {
   function findControls(root = document) {
     const found = [];
     const seenTargets = new Set();
+    let examined = 0;
 
     for (const element of root.querySelectorAll(CANDIDATE_SELECTOR)) {
+      examined += 1;
       const kind = classify(element);
       if (!kind) continue;
 
@@ -167,6 +186,8 @@ export function createExpander({ matchers }) {
       seenTargets.add(target);
       found.push({ kind, element, target });
     }
+
+    noteScan(examined);
     return found;
   }
 
@@ -204,6 +225,8 @@ export function createExpander({ matchers }) {
     scanTimer = null;
     if (!running || !inScope()) return;
 
+    dirty = false;
+    scans += 1;
     const clicks = clickBatch();
     if (clicks > 0) {
       quietPasses = 0;
@@ -225,11 +248,31 @@ export function createExpander({ matchers }) {
     scanTimer = setTimeout(scan, settings.get('expand.scanDelayMs'));
   }
 
+  /** Beats to wait between checks once the thread has settled and gone quiet. */
+  const IDLE_BEAT_INTERVAL = 10;
+
+  function beat() {
+    // Something changed, or we have not yet settled: scan as before.
+    if (dirty || quietPasses < 3) {
+      idleBeats = 0;
+      schedule();
+      return;
+    }
+
+    // Settled and unchanged. Keep the safety net, at a tenth of the cost.
+    idleBeats += 1;
+    if (idleBeats >= IDLE_BEAT_INTERVAL) {
+      idleBeats = 0;
+      schedule();
+    }
+  }
+
   function restartHeartbeat() {
     clearInterval(heartbeat);
     heartbeat = null;
+    idleBeats = 0;
     const interval = settings.get('expand.heartbeatMs');
-    if (interval > 0) heartbeat = setInterval(schedule, interval);
+    if (interval > 0) heartbeat = setInterval(beat, interval);
   }
 
   /** Clears per-page counters. Called on navigation and on manual rescan. */
@@ -237,6 +280,8 @@ export function createExpander({ matchers }) {
     totalClicks = 0;
     quietPasses = 0;
     limitReached = false;
+    dirty = true;
+    idleBeats = 0;
     clicked = new WeakSet();
     publishState();
   }
@@ -264,18 +309,23 @@ export function createExpander({ matchers }) {
     },
 
     onDomChanged() {
+      // The page moved, so the next scan has something to look at.
+      dirty = true;
+      idleBeats = 0;
       schedule();
     },
 
     onSettingsChanged(changed) {
       if ('expand.heartbeatMs' in changed) restartHeartbeat();
       if ('expand.maxTotalClicks' in changed) limitReached = false;
+      dirty = true;
       publishState();
       schedule();
     },
 
     /** Re-reads label packs after the user edits languages or patterns. */
     setMatchers(next) {
+      dirty = true;
       active = next;
       schedule();
     },
@@ -318,6 +368,6 @@ export function createExpander({ matchers }) {
     },
 
     // Exposed for the test suite.
-    _internals: { classify, findControls },
+    _internals: { classify, findControls, beat, scanCount: () => scans },
   };
 }

@@ -13,6 +13,7 @@
 import { bus, EVENTS } from '../core/bus.js';
 import { el } from '../core/dom.js';
 import { LINKS, PUBLIC_REPO, brandLink } from '../meta.js';
+import { brandMark, icon } from './icons.js';
 import * as settings from '../core/settings.js';
 import { GROUPS } from '../core/settings.js';
 
@@ -33,57 +34,66 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
 
   // ------------------------------------------------------------- panel --
 
-  function build() {
-    statusText = el('span', { className: 'tc-status', text: 'Watching for threads…' });
+  /** A square, icon-only button. The label is its accessible name and tooltip. */
+  function iconButton(name, label, onClick) {
+    return el(
+      'button',
+      {
+        type: 'button',
+        className: 'tc-icon-btn',
+        title: label,
+        'aria-label': label,
+        on: { click: onClick },
+      },
+      icon(name),
+    );
+  }
 
-    pauseButton = el('button', {
-      type: 'button',
-      text: 'Pause',
-      title: 'Pause automatic expansion (e)',
-      on: { click: () => expander.togglePause() },
+  function build() {
+    // The live region is the status line alone. Putting it on the whole panel
+    // would have every button change announced as well.
+    statusText = el('span', {
+      className: 'tc-status',
+      role: 'status',
+      'aria-live': 'polite',
+      text: 'Watching for threads…',
     });
+
+    pauseButton = iconButton('pause', 'Pause automatic expansion (e)', () => expander.togglePause());
+    pauseButton.setAttribute('aria-pressed', 'false');
 
     panel = el(
       'div',
-      { id: PANEL_ID, role: 'status', 'aria-live': 'polite' },
-      // Build stamp first, so "which version is this?" is answered before
-      // anything else in the panel is read.
+      { id: PANEL_ID, role: 'region', 'aria-label': 'Threadcalm' },
+      // Identity first: what this is, which build, and where it came from --
+      // the panel appears on a page nobody asked it to appear on.
       el(
         'div',
-        { className: `tc-build${channel === 'stable' ? '' : ' tc-build-pre'}` },
-        // The panel appears on a page nobody asked it to appear on, so it
-        // says what it is and links to where it came from.
+        { className: 'tc-build' },
+        brandMark(),
         brandLink(el),
-        el('span', { text: ` ${buildLabel}`, title: 'Version, channel and build stamp' }),
+        channel === 'stable' ? null : el('span', { className: 'tc-chip-pre', text: channel }),
+        el('span', {
+          className: 'tc-stamp',
+          text: `v${version} · ${stamp}`,
+          title: 'Version and build stamp',
+        }),
       ),
       el(
         'div',
         { className: 'tc-row' },
         el('span', { className: 'tc-dot', 'aria-hidden': 'true' }),
         statusText,
-        pauseButton,
-        el('button', {
-          type: 'button',
-          text: 'Settings',
-          title: 'Open settings (s)',
-          on: { click: openSettings },
-        }),
-        // The only visible affordance for the shortcuts. Without it nobody
-        // discovers that pressing ? does anything.
-        el('button', {
-          type: 'button',
-          text: '?',
-          title: 'Keyboard shortcuts (?)',
-          'aria-label': 'Show keyboard shortcuts',
-          on: { click: () => bus.emit(EVENTS.SHOW_HELP) },
-        }),
-        el('button', {
-          type: 'button',
-          text: '×',
-          title: 'Hide this panel (p)',
-          'aria-label': 'Hide the Threadcalm panel',
-          on: { click: hide },
-        }),
+        el(
+          'div',
+          { className: 'tc-tools' },
+          pauseButton,
+          iconButton('settings', 'Settings (s)', openSettings),
+          // The only visible affordance for the shortcuts. Without it nobody
+          // discovers that pressing ? does anything.
+          iconButton('help', 'Keyboard shortcuts (?)', () => bus.emit(EVENTS.SHOW_HELP)),
+          iconButton('close', 'Hide this panel (p)', hide),
+        ),
       ),
     );
 
@@ -118,18 +128,28 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
   function onProgress({ totalClicks, settled }) {
     const noun = `${totalClicks} item${totalClicks === 1 ? '' : 's'}`;
     setStatus(settled ? `Thread expanded — ${noun}` : `Expanding… ${noun}`);
+    // The dot pulses only while work is actually happening, so a still dot
+    // means a quiet script.
+    panel?.classList.toggle('tc-busy', !settled);
   }
+
+  let shownPaused = null;
 
   function onState({ enabled, paused, totalClicks, limitReached }) {
     if (!panel) return;
     panel.classList.toggle('tc-paused', paused || !enabled);
     panel.classList.toggle('tc-limit', limitReached);
-    if (pauseButton) {
-      pauseButton.textContent = paused ? 'Resume' : 'Pause';
-      pauseButton.title = paused
-        ? 'Resume automatic expansion (e)'
-        : 'Pause automatic expansion (e)';
+    if (paused || !enabled || limitReached) panel.classList.remove('tc-busy');
+
+    if (pauseButton && shownPaused !== paused) {
+      shownPaused = paused;
+      const label = paused ? 'Resume automatic expansion (e)' : 'Pause automatic expansion (e)';
+      pauseButton.replaceChildren(icon(paused ? 'play' : 'pause'));
+      pauseButton.title = label;
+      pauseButton.setAttribute('aria-label', label);
+      pauseButton.setAttribute('aria-pressed', paused ? 'true' : 'false');
     }
+
     if (limitReached) {
       setStatus(`Click limit reached at ${totalClicks}`);
     } else if (paused) {
@@ -141,58 +161,154 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
 
   // ---------------------------------------------------------- settings --
 
-  /** One form control per schema entry, bound straight to `settings.update`. */
+  /** A stable, attribute-safe id for a setting's row. */
+  function fieldId(definition) {
+    return `tc-field-${definition.key.replace(/[^a-z0-9]+/gi, '-')}`;
+  }
+
+  /**
+   * Splits a trailing unit off a label: "Scan delay (ms)" -> "Scan delay", "ms".
+   * The unit is then shown beside the number it measures, where it is read.
+   */
+  function splitUnit(label) {
+    const match = /^(.*?)\s*\((ms|px)\)$/.exec(label);
+    return match ? { text: match[1], unit: match[2] } : { text: label, unit: null };
+  }
+
+  /** The left-hand half of every row: what the setting is, and what it does. */
+  function describe(definition, id) {
+    const { text } = splitUnit(definition.label);
+    return el(
+      'span',
+      { className: 'tc-field-text' },
+      el('span', { className: 'tc-label', id: `${id}-label`, text }),
+      definition.help
+        ? el('span', { className: 'tc-help', id: `${id}-help`, text: definition.help })
+        : null,
+    );
+  }
+
+  /**
+   * One row per schema entry, bound straight to `settings.update`.
+   *
+   * The native checkbox and radio inputs stay in the document -- focusable,
+   * labelled, operable from the keyboard -- and are only visually replaced by
+   * the switch, card or pill drawn beside them. Nothing here is a div that
+   * pretends to be a control.
+   */
   function renderField(definition) {
     const value = settings.get(definition.key);
-    const help = definition.help
-      ? el('p', { className: 'tc-help', text: definition.help })
-      : null;
-
+    const id = fieldId(definition);
+    const describedBy = definition.help ? `${id}-help` : null;
     const commit = (next) => settings.update({ [definition.key]: next });
 
     switch (definition.type) {
       case 'boolean':
         return el(
-          'div',
-          { className: 'tc-field' },
+          'label',
+          { className: 'tc-field tc-field-inline' },
+          describe(definition, id),
           el(
-            'label',
-            {},
+            'span',
+            { className: 'tc-control' },
             el('input', {
               type: 'checkbox',
+              className: 'tc-vh',
               checked: value ? 'checked' : null,
+              'aria-labelledby': `${id}-label`,
+              'aria-describedby': describedBy,
               on: { change: (event) => commit(event.target.checked) },
             }),
-            el('span', { text: definition.label }),
+            el('span', { className: 'tc-switch', 'aria-hidden': 'true' }),
           ),
-          help,
         );
 
-      case 'number':
+      case 'number': {
+        const { unit } = splitUnit(definition.label);
         return el(
-          'div',
-          { className: 'tc-field' },
+          'label',
+          { className: 'tc-field tc-field-inline' },
+          describe(definition, id),
           el(
-            'label',
-            {},
-            el('span', { text: definition.label }),
+            'span',
+            { className: 'tc-control' },
             el('input', {
               type: 'number',
               value: String(value),
               min: definition.min ?? null,
               max: definition.max ?? null,
               step: definition.step ?? 1,
+              inputmode: 'decimal',
+              'aria-labelledby': unit ? `${id}-label ${id}-unit` : `${id}-label`,
+              'aria-describedby': describedBy,
               on: { change: (event) => commit(event.target.value) },
             }),
+            // Rendered even when empty, so every number field in the sheet
+            // shares one right edge whether or not it carries a unit.
+            el('span', {
+              className: 'tc-unit',
+              id: unit ? `${id}-unit` : null,
+              'aria-hidden': unit ? null : 'true',
+              text: unit ?? '',
+            }),
           ),
-          help,
         );
+      }
 
       case 'select': {
+        const options = definition.options ?? [];
+
+        // A choice that is a trade rather than a taste is drawn as cards, each
+        // showing what it gains and costs, so the comparison happens at the
+        // point of choosing rather than in a legend beside a dropdown.
+        if (options.some((option) => option.gain || option.cost)) {
+          const cards = el('div', {
+            className: 'tc-cards',
+            role: 'radiogroup',
+            'aria-labelledby': `${id}-label`,
+            'aria-describedby': describedBy,
+          });
+          for (const option of options) {
+            cards.append(
+              el(
+                'label',
+                { className: 'tc-card' },
+                el('input', {
+                  type: 'radio',
+                  className: 'tc-vh',
+                  name: id,
+                  value: option.value,
+                  checked: option.value === value ? 'checked' : null,
+                  on: {
+                    change: (event) => {
+                      if (event.target.checked) commit(option.value);
+                    },
+                  },
+                }),
+                el(
+                  'span',
+                  { className: 'tc-card-face' },
+                  el('span', { className: 'tc-card-title', text: option.label }),
+                  option.gain ? el('span', { className: 'tc-gain', text: option.gain }) : null,
+                  option.cost ? el('span', { className: 'tc-cost', text: option.cost }) : null,
+                ),
+              ),
+            );
+          }
+          return el(
+            'div',
+            { className: 'tc-field tc-field-stacked' },
+            describe(definition, id),
+            cards,
+          );
+        }
+
         const select = el('select', {
+          'aria-labelledby': `${id}-label`,
+          'aria-describedby': describedBy,
           on: { change: (event) => commit(event.target.value) },
         });
-        for (const option of definition.options ?? []) {
+        for (const option of options) {
           select.append(
             el('option', {
               value: option.value,
@@ -201,46 +317,30 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
             }),
           );
         }
-        // Where a choice is a trade rather than a preference, the trade is
-        // spelled out beside it: picking well here means comparing options,
-        // not reading one line about the one already selected.
-        const notes = (definition.options ?? []).some(
-          (option) => option.gain || option.cost,
-        )
-          ? el(
-              'dl',
-              { className: 'tc-option-notes' },
-              ...(definition.options ?? []).flatMap((option) => [
-                el('dt', { text: option.label }),
-                el(
-                  'dd',
-                  {},
-                  option.gain ? el('span', { className: 'tc-gain', text: option.gain }) : null,
-                  option.cost ? el('span', { className: 'tc-cost', text: option.cost }) : null,
-                ),
-              ]),
-            )
-          : null;
-
         return el(
-          'div',
-          { className: 'tc-field' },
-          el('label', {}, el('span', { text: definition.label }), select),
-          help,
-          notes,
+          'label',
+          { className: 'tc-field tc-field-inline' },
+          describe(definition, id),
+          el('span', { className: 'tc-control' }, select),
         );
       }
 
       case 'multiselect': {
         const chosen = new Set(value);
-        const choices = el('div', { className: 'tc-choices' });
+        const pills = el('div', {
+          className: 'tc-pills',
+          role: 'group',
+          'aria-labelledby': `${id}-label`,
+          'aria-describedby': describedBy,
+        });
         for (const option of definition.options ?? []) {
-          choices.append(
+          pills.append(
             el(
               'label',
-              {},
+              { className: 'tc-pill' },
               el('input', {
                 type: 'checkbox',
+                className: 'tc-vh',
                 checked: chosen.has(option.value) ? 'checked' : null,
                 on: {
                   change: (event) => {
@@ -250,36 +350,33 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
                   },
                 },
               }),
-              el('span', { text: option.label }),
+              el('span', { className: 'tc-pill-face', text: option.label }),
             ),
           );
         }
         return el(
           'div',
-          { className: 'tc-field' },
-          el('span', { text: definition.label }),
-          choices,
-          help,
+          { className: 'tc-field tc-field-stacked' },
+          describe(definition, id),
+          pills,
         );
       }
 
       case 'lines':
         return el(
           'div',
-          { className: 'tc-field' },
-          el(
-            'label',
-            {},
-            el('span', { text: definition.label }),
-            el('textarea', {
-              spellcheck: 'false',
-              on: {
-                change: (event) => commit(event.target.value.split('\n')),
-              },
-              text: (value ?? []).join('\n'),
-            }),
-          ),
-          help,
+          { className: 'tc-field tc-field-stacked' },
+          describe(definition, id),
+          el('textarea', {
+            spellcheck: 'false',
+            rows: '3',
+            'aria-labelledby': `${id}-label`,
+            'aria-describedby': describedBy,
+            on: {
+              change: (event) => commit(event.target.value.split('\n')),
+            },
+            text: (value ?? []).join('\n'),
+          }),
         );
 
       default:
@@ -310,60 +407,86 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
     );
   }
 
+  function textButton(text, onClick, { variant = null, title = null } = {}) {
+    return el('button', {
+      type: 'button',
+      className: variant ? `tc-btn tc-btn-${variant}` : 'tc-btn',
+      text,
+      title,
+      on: { click: onClick },
+    });
+  }
+
   function buildSheet() {
-    const body = el(
-      'div',
-      { className: 'tc-sheet', role: 'document' },
+    const head = el(
+      'header',
+      { className: 'tc-sheet-head' },
+      brandMark(),
       el('h2', {}, brandLink(el)),
-      el('p', { className: 'tc-version', text: buildLabel }),
+      el('span', { className: 'tc-stamp', text: buildLabel }),
+      el('span', { className: 'tc-spacer' }),
+      iconButton('close', 'Close settings (Esc)', closeSettings),
     );
 
+    const content = el('div', { className: 'tc-sheet-body' });
     for (const group of GROUPS) {
       const definitions = settings.definitionsFor(group.id);
       if (definitions.length === 0) continue;
 
-      const fieldset = el('fieldset', {}, el('legend', { text: group.title }));
+      const titleId = `tc-group-${group.id}`;
+      const section = el(
+        'section',
+        { className: 'tc-group', 'aria-labelledby': titleId },
+        el('h3', { className: 'tc-group-title', id: titleId, text: group.title }),
+      );
       for (const definition of definitions) {
         const field = renderField(definition);
-        if (field) fieldset.append(field);
+        if (field) section.append(field);
       }
-      body.append(fieldset);
+      content.append(section);
     }
 
-    body.append(
+    const links = buildLinks();
+    if (links) content.append(links);
+
+    const foot = el(
+      'footer',
+      { className: 'tc-sheet-foot' },
       el(
         'div',
-        { className: 'tc-actions' },
-        el('button', {
-          type: 'button',
-          text: 'Forget seen posts',
-          title: 'Clear the local "new post" history',
-          on: {
-            click: () => {
-              highlighter?.forgetSeen?.();
-              bus.emit(EVENTS.TOAST, { message: 'Seen-post history cleared' });
-            },
-          },
+        { className: 'tc-foot-group' },
+        // The diagnostics report is the answer to "is it still working when
+        // it should be idle?", so it belongs where someone worried about that
+        // will actually look, not only in the manager's menu.
+        textButton('Copy diagnostics', () => bus.emit(EVENTS.COPY_DIAGNOSTICS), {
+          title: 'Selector health and how hard the script has been working, for bug reports',
         }),
-        el('button', {
-          type: 'button',
-          text: 'Reset to defaults',
-          on: {
-            click: () => {
-              settings.reset();
-              // Rebuild so every control reflects the restored values.
-              closeSettings();
-              openSettings();
-              bus.emit(EVENTS.TOAST, { message: 'Settings reset' });
-            },
+        textButton(
+          'Forget seen posts',
+          () => {
+            highlighter?.forgetSeen?.();
+            bus.emit(EVENTS.TOAST, { message: 'Seen-post history cleared' });
           },
-        }),
-        el('button', { type: 'button', text: 'Close', on: { click: closeSettings } }),
+          { title: 'Clear the local "new post" history' },
+        ),
+      ),
+      el(
+        'div',
+        { className: 'tc-foot-group' },
+        textButton(
+          'Reset to defaults',
+          () => {
+            settings.reset();
+            // Rebuild so every control reflects the restored values.
+            closeSettings();
+            openSettings();
+            bus.emit(EVENTS.TOAST, { message: 'Settings reset' });
+          },
+          { variant: 'danger' },
+        ),
+        textButton('Done', closeSettings, { variant: 'primary' }),
       ),
     );
-
-    const links = buildLinks();
-    if (links) body.append(links);
 
     return el(
       'div',
@@ -378,7 +501,7 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
           },
         },
       },
-      body,
+      el('div', { className: 'tc-sheet', role: 'document' }, head, content, foot),
     );
   }
 
@@ -386,7 +509,11 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
     if (sheet) return true;
     sheet = buildSheet();
     document.body.append(sheet);
-    sheet.querySelector('input, select, textarea, button')?.focus();
+    // Straight to the first setting rather than the close button in the header.
+    (
+      sheet.querySelector('.tc-sheet-body :is(input, select, textarea)')
+      ?? sheet.querySelector('button')
+    )?.focus();
     return true;
   }
 

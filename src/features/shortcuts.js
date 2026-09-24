@@ -14,10 +14,14 @@ import { bus, EVENTS } from '../core/bus.js';
 import { el, isEditingContext, rootPosts } from '../core/dom.js';
 import { getValue, setValue } from '../core/gm.js';
 import { LINKS, PUBLIC_REPO, brandLink } from '../meta.js';
+import { brandMark, icon } from '../ui/icons.js';
 import * as settings from '../core/settings.js';
 
 export const FOCUS_CLASS = 'tc-focus';
 const OVERLAY_ID = 'tc-help';
+
+/** What a key is called on the keycap, where that differs from its event name. */
+const KEY_CAPS = { Escape: 'Esc' };
 
 /** Remembers that the shortcut list has been shown once. */
 const SEEN_KEY = 'help-seen';
@@ -120,13 +124,34 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       el(
         'div',
         { className: 'tc-help-card' },
-        el('p', { className: 'tc-eyebrow' }, brandLink(el)),
-        el('h2', { text: 'Keyboard shortcuts' }),
+        el(
+          'header',
+          { className: 'tc-help-head' },
+          el(
+            'div',
+            {},
+            el('p', { className: 'tc-eyebrow' }, brandMark(), brandLink(el)),
+            el('h2', { text: 'Keyboard shortcuts' }),
+          ),
+          // Esc and a click outside both close this, but neither is visible;
+          // a dialog should show its own way out.
+          el(
+            'button',
+            {
+              type: 'button',
+              className: 'tc-icon-btn',
+              title: 'Close (Esc)',
+              'aria-label': 'Close keyboard shortcuts',
+              on: { click: () => toggleHelp(false) },
+            },
+            icon('close'),
+          ),
+        ),
         el(
           'dl',
-          {},
+          { className: 'tc-keys' },
           ...BINDINGS.flatMap((binding) => [
-            el('dt', {}, ...binding.keys.map((key) => el('kbd', { text: key }))),
+            el('dt', {}, ...binding.keys.map((key) => el('kbd', { text: KEY_CAPS[key] ?? key }))),
             el('dd', { text: binding.label }),
           ]),
         ),

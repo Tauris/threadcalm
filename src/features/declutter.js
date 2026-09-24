@@ -30,7 +30,7 @@ export function createDeclutterer({ matchers }) {
       if (!(element instanceof HTMLElement)) continue;
       if (element.children.length > 0) continue; // leaf text nodes only
 
-      const texts = accessibleTexts(element).filter((text) => text.length <= MAX_LABEL_LENGTH);
+      const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
       if (!texts.some((text) => active.promoted.test(text))) continue;
 
       const card = closestPost(element) ?? element.closest('[role="listitem"], li, section');

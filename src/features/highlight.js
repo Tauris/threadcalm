@@ -25,6 +25,9 @@ const STORAGE_KEY = 'seen-posts';
 /** Enough history for weeks of normal reading without unbounded growth. */
 const MAX_SEEN = 3000;
 
+/** A reply counter is "12 replies"; anything longer is not one. */
+const MAX_LABEL_LENGTH = 40;
+
 export function createHighlighter({ matchers }) {
   let active = matchers;
 
@@ -54,7 +57,7 @@ export function createHighlighter({ matchers }) {
     if (!active.replyCount) return false;
 
     for (const element of article.querySelectorAll('span, button, a, [role="button"]')) {
-      for (const text of accessibleTexts(element)) {
+      for (const text of accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH })) {
         const match = active.replyCount.exec(text);
         if (match && Number(match[1]) > 0) return true;
       }

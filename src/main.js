@@ -25,6 +25,7 @@ import { createDeclutterer } from './features/declutter.js';
 import { createExpander } from './features/expand.js';
 import { createHighlighter } from './features/highlight.js';
 import { createQuietChrome } from './features/quiet.js';
+import { snapshot } from './core/stats.js';
 import { createReadingMode } from './features/reading.js';
 import { createShortcuts } from './features/shortcuts.js';
 import { createTranslateTamer } from './features/translate.js';
@@ -107,6 +108,7 @@ function main() {
 
   bus.on(EVENTS.NAVIGATE, (payload) => dispatch('onNavigate', payload));
   bus.on(EVENTS.DOM_CHANGED, () => dispatch('onDomChanged'));
+  bus.on(EVENTS.COPY_DIAGNOSTICS, () => { copyDiagnostics(); });
 
   bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
     if (MATCHER_KEYS.some((key) => key in changed)) {
@@ -191,13 +193,40 @@ const HEALTH_SELECTORS = [
  * display and box metrics. It deliberately reports no text, no names and no
  * ids, so the result can be pasted into an issue as-is.
  */
+/**
+ * How hard the script is working, as opposed to how the page is built.
+ *
+ * Two copies of this taken an hour apart answer the question a memory graph
+ * cannot: whether anything is still running on a page nobody is touching.
+ */
+function activityLines() {
+  const stats = snapshot();
+  const idle = stats.sinceLastScanSeconds;
+
+  return [
+    '',
+    'activity since load:',
+    `  ${String(stats.uptimeSeconds).padStart(7)}  seconds running`,
+    `  ${String(stats.scans).padStart(7)}  scans`,
+    `  ${String(stats.candidates).padStart(7)}  controls examined`,
+    `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
+    `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+    `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
+    `  ${String(idle === null ? 'never' : idle).padStart(7)}  seconds since the last scan`,
+    '',
+    'On an idle page the first four should barely move between two readings',
+    'taken minutes apart. A rising element count means the page is still',
+    'growing, which is expansion working rather than anything leaking.',
+  ];
+}
+
 async function copyDiagnostics() {
   const control =
     document.querySelector('.tc-translate-compact, .tc-translate-hidden') ??
     document.querySelector('[data-tc-title]');
 
   const lines = [
-    `Threadcalm ${VERSION}`,
+    `Threadcalm ${VERSION} (${CHANNEL} ${BUILD})`,
     `${navigator.userAgent}`,
     `host: ${location.host}`,
     '',
@@ -214,7 +243,8 @@ async function copyDiagnostics() {
     lines.push(`  ${String(count).padStart(4)}  ${label}  (${selector})`);
   }
 
-  lines.push('', `posts resolved: ${rootPosts().length}`, '');
+  lines.push('', `posts resolved: ${rootPosts().length}`);
+  lines.push(...activityLines(), '');
 
   if (!control) {
     lines.push('No translate control found on this page.');

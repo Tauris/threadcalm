@@ -17,6 +17,7 @@ import { debounce, el, rootPosts } from '../core/dom.js';
 import { copyToClipboard } from '../core/gm.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
+import { icon } from '../ui/icons.js';
 import { countPosts, extractPost, renderThread } from './thread.js';
 
 export const CHIP_CLASS = 'tc-chip';
@@ -122,32 +123,40 @@ export function createCopyTools({ expander }) {
     return el(
       'div',
       { className: CHIP_CLASS, role: 'group', 'aria-label': 'Threadcalm post actions' },
-      el('button', {
-        type: 'button',
-        title: 'Copy this thread (c)',
-        'aria-label': 'Copy this thread',
-        text: 'copy',
-        on: {
-          click: (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            copyThread(article);
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'tc-chip-btn',
+          title: 'Copy this thread (c)',
+          'aria-label': 'Copy this thread',
+          on: {
+            click: (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              copyThread(article);
+            },
           },
         },
-      }),
-      el('button', {
-        type: 'button',
-        title: 'Copy a link to this thread (y)',
-        'aria-label': 'Copy a link to this thread',
-        text: 'link',
-        on: {
-          click: (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            copyLink(article);
+        icon('copy'),
+      ),
+      el(
+        'button',
+        {
+          type: 'button',
+          className: 'tc-chip-btn',
+          title: 'Copy a link to this thread (y)',
+          'aria-label': 'Copy a link to this thread',
+          on: {
+            click: (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              copyLink(article);
+            },
           },
         },
-      }),
+        icon('link'),
+      ),
     );
   }
 
