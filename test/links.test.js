@@ -110,6 +110,23 @@ describe('the brand link', () => {
   });
 });
 
+describe('the Greasy Fork listing', () => {
+  it('uses only absolute links', () => {
+    // Greasy Fork syncs its description from docs/GREASYFORK.md and renders it
+    // on its own site, where a relative link would resolve against Greasy Fork
+    // rather than this repository.
+    const listing = readFileSync('docs/GREASYFORK.md', 'utf8');
+    const targets = [...listing.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]);
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) expect(target, target).toMatch(/^https:\/\//);
+  });
+
+  it('names the copyright holder the licence does', () => {
+    const listing = readFileSync('docs/GREASYFORK.md', 'utf8');
+    expect(listing).toContain(COPYRIGHT_HOLDER);
+  });
+});
+
 describe('the copyright holder', () => {
   it('matches the name in LICENSE', () => {
     // The notice in the built file asserts this name; LICENSE is where it is

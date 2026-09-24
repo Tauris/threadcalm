@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-09-24
+
+### Added
+
+- **The Greasy Fork listing now lives in the repository**, as
+  [docs/GREASYFORK.md](docs/GREASYFORK.md), and Greasy Fork syncs its description from there. A
+  release that changes a feature can now change the listing's description in the same commit,
+  rather than leaving it stale while the script updates itself. No change to the script.
+
 ## [1.0.6] - 2026-09-24
 
 ### Changed
@@ -269,6 +278,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.7]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.7
 [1.0.6]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.6
 [1.0.5]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.4

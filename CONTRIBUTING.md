@@ -117,6 +117,10 @@ exactly as a stale stable one does.
 1. Set the version in [package.json](package.json). The build injects it into the userscript
    header and into the console banner, so it is the single source of truth.
 2. Move the *Unreleased* changelog entries under the new version.
+   If the release changes anything [docs/GREASYFORK.md](docs/GREASYFORK.md) describes, update it
+   in the same commit. Greasy Fork syncs its description from that file, so it is the listing
+   people read before installing. Keep its links absolute: it is rendered on Greasy Fork, where a
+   relative link would point at the wrong site.
 3. `npm run check`, then commit the rebuilt `dist/` — it is the file people install.
 4. Tag `vX.Y.Z`.
 

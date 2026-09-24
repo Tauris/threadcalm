@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.0.6.11
+// @version     1.0.7.11
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.0.6.11
+ * Threadcalm (beta) v1.0.7.11
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -4514,9 +4514,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.6.11" : "0.0.0-dev";
+  var VERSION = true ? "1.0.7.11" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "9c10b27" : "dev";
+  var BUILD = true ? "bfae0bf" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
