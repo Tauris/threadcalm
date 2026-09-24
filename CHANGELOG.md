@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-09-24
+
+### Fixed
+
+- **Copying a thread copied a single reply.** Extraction read a post and whatever was nested inside
+  it — right for layouts that nest a reply inside the post it answers, wrong for Engage's
+  conversation view, where the starter and every comment are siblings in a flat list. So copying
+  from anywhere below the starter produced that one comment alone. A thread is now the starter plus
+  every post after it up to the next starter, reply depth is rebuilt from indentation (the only
+  nesting that layout expresses), and the whole conversation is expanded before it is read, since
+  "Show previous comments" sits between posts rather than inside one. *Copy link* likewise copies
+  the thread's link rather than a reply's.
+- **A thread's opening post was copied under its author's initials.** Engage draws an avatar with
+  no photo as the author's initials, and makes it a profile link just like the name beside it.
+  The author was taken from the first profile link in the post, so where the avatar came first the
+  post was headed `## KJ` — and because the header was then stripped by matching that, the full
+  name was left at the top of the body. Initials-only links are now passed over in favour of the
+  name, the action buttons' "Like – *name*'s post" label is the fallback, and both the initials
+  and the name are removed from the start of the body.
+- **<kbd>c</kbd> kept copying the same post after you scrolled.** With no post chosen by
+  <kbd>j</kbd>/<kbd>k</kbd>, the first press picked the topmost visible post — and then remembered
+  it for good, so every later press copied where you had been rather than where you were. It now
+  looks again each time, and a post chosen with <kbd>j</kbd>/<kbd>k</kbd> is kept only while it is
+  still on screen.
+
 ## [1.0.4] - 2026-09-24
 
 ### Changed
@@ -226,6 +251,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.5]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.2

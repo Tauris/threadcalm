@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm
 // @namespace   https://github.com/Tauris/threadcalm
-// @version     1.0.4
+// @version     1.0.5
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm v1.0.4
+ * Threadcalm v1.0.5
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -1233,13 +1233,22 @@
   var ACTION_SET = new Set(ACTION_LABELS);
   var COUNTER_LINE = /^\d+(?:[.,]\d+)?\s*(?:k|m)?\s*(?:likes?|reactions?|views?|seen)?$/i;
   var RELATIVE_TIME = /^(?:just now|\d+\s*(?:s|m|h|d|w|mo|y)\b.*|vor\s+.*|il y a\s+.*|hace\s+.*)$/i;
+  var INITIALS = new RegExp("^\\p{Lu}{1,3}$", "u");
+  function initialsOf(name) {
+    return name.split(/\s+/).map((part) => part.charAt(0)).join("").toLocaleUpperCase();
+  }
+  var PROFILE_LINK_SELECTOR = 'a[href*="/users/"], a[href*="/people/"], a[href*="userId="], a[data-testid*="author" i]';
   function extractAuthor(article) {
-    const profileLink = article.querySelector(
-      'a[href*="/users/"], a[href*="/people/"], a[href*="userId="], a[data-testid*="author" i]'
-    );
-    if (profileLink) {
-      const name = normalizeText(visibleText(profileLink));
-      if (name && name.length < 80) return name;
+    for (const link of article.querySelectorAll(PROFILE_LINK_SELECTOR)) {
+      const candidates = [
+        visibleText(link),
+        link.getAttribute("aria-label"),
+        link.getAttribute("title")
+      ];
+      for (const candidate of candidates) {
+        const name = normalizeText(candidate);
+        if (name && name.length < 80 && !INITIALS.test(name)) return name;
+      }
     }
     const action = article.querySelector(
       'button[aria-label^="Like -"], button[aria-label^="Comment -"], button[aria-label^="Reply -"], button[aria-label^="Share -"]'
@@ -1319,7 +1328,12 @@
       return true;
     });
     const author = extractAuthor(article);
-    if (kept[0] && kept[0] === author) kept.shift();
+    const header = /* @__PURE__ */ new Set([author, initialsOf(author)]);
+    let dropped = 0;
+    while (kept.length > 0 && dropped < 2 && header.has(kept[0])) {
+      kept.shift();
+      dropped += 1;
+    }
     return kept.join("\n");
   }
   function directReplies(article) {
@@ -1340,6 +1354,58 @@
     };
     if (!post.body && replies.length === 0) return null;
     return post;
+  }
+  var STARTER_SELECTOR = ".qaThreadStarter";
+  var INDENT_TOLERANCE = 2;
+  function threadMembers(post) {
+    if (!(post instanceof HTMLElement)) return null;
+    const all = allPosts();
+    const index = all.findIndex(
+      (candidate) => candidate === post || candidate.contains(post) || post.contains(candidate)
+    );
+    if (index < 0) return null;
+    const isStarter = (candidate) => candidate.matches(STARTER_SELECTOR);
+    let start = index;
+    while (start >= 0 && !isStarter(all[start])) start -= 1;
+    if (start < 0) return null;
+    let end = start + 1;
+    while (end < all.length && !isStarter(all[end])) end += 1;
+    const members = all.slice(start, end);
+    const starter = members[0];
+    if (members.length > 1 && members.slice(1).every((member) => starter.contains(member))) {
+      return null;
+    }
+    return members;
+  }
+  function extractThread(members) {
+    if (!members?.length) return null;
+    const [starter, ...rest] = members;
+    const root = extractPost(starter) ?? {
+      author: extractAuthor(starter),
+      body: "",
+      timestamp: extractTimestamp(starter),
+      permalink: extractPermalink(starter),
+      replies: []
+    };
+    const stack = [{ node: root, left: starter.getBoundingClientRect().left }];
+    for (const member of rest) {
+      const node2 = extractPost(member);
+      if (!node2) continue;
+      const { left } = member.getBoundingClientRect();
+      while (stack.length > 1 && stack[stack.length - 1].left >= left - INDENT_TOLERANCE) {
+        stack.pop();
+      }
+      stack[stack.length - 1].node.replies.push(node2);
+      stack.push({ node: node2, left });
+    }
+    return root;
+  }
+  function threadScope(members) {
+    if (!members?.length) return null;
+    const last = members[members.length - 1];
+    let node2 = members[0];
+    while (node2 && !node2.contains(last)) node2 = node2.parentElement;
+    return node2;
   }
   function countPosts(post) {
     if (!post) return 0;
@@ -1447,16 +1513,18 @@
         toast("No post found to copy", "warn");
         return false;
       }
+      let members = threadMembers(article);
       if (expandFirst && expander) {
-        const clicks = expander.expandWithin(article);
+        const clicks = expander.expandWithin(members ? threadScope(members) : article);
         if (clicks > 0) {
           toast(`Expanding ${clicks} more section${clicks === 1 ? "" : "s"}…`);
           await new Promise(
             (resolve) => setTimeout(resolve, get("expand.settleDelayMs"))
           );
+          if (members) members = threadMembers(members[0]) ?? members;
         }
       }
-      const post = extractPost(article);
+      const post = members ? extractThread(members) : extractPost(article);
       if (!post) {
         toast("Could not read this post", "warn");
         return false;
@@ -1473,7 +1541,8 @@
       return copied;
     }
     async function copyLink(article) {
-      const post = article ? extractPost(article) : null;
+      const source = threadMembers(article)?.[0] ?? article;
+      const post = source ? extractPost(source) : null;
       const url = post?.permalink ?? location.href;
       const copied = await copyToClipboard(url);
       toast(copied ? "Link copied" : "Clipboard was blocked by the browser", copied ? "info" : "warn");
@@ -2194,6 +2263,7 @@
   var TRANSLATE_MODES = ["compact", "known", "hide", "off"];
   function createShortcuts({ expander, copyTools, readingMode, panel, quietChrome }) {
     let focusIndex = -1;
+    let pinned = false;
     let overlay = null;
     let unsubscribeHelp = null;
     function toast(message) {
@@ -2210,10 +2280,13 @@
     function currentPost() {
       const list = posts();
       if (list.length === 0) return null;
-      if (focusIndex >= 0 && focusIndex < list.length) return list[focusIndex];
+      if (pinned && focusIndex >= 0 && focusIndex < list.length) {
+        const chosen = list[focusIndex];
+        const { top, bottom } = chosen.getBoundingClientRect();
+        if (bottom > 0 && top < window.innerHeight) return chosen;
+      }
       const firstVisible = list.findIndex((post) => post.getBoundingClientRect().bottom > 80);
-      focusIndex = firstVisible >= 0 ? firstVisible : 0;
-      return list[focusIndex];
+      return list[firstVisible >= 0 ? firstVisible : 0];
     }
     function moveFocus(delta) {
       const list = posts();
@@ -2227,6 +2300,7 @@
       } else {
         focusIndex = Math.min(list.length - 1, Math.max(0, focusIndex + delta));
       }
+      pinned = true;
       clearFocusMarks();
       const post = list[focusIndex];
       post.classList.add(FOCUS_CLASS);
@@ -2393,6 +2467,7 @@
       },
       onNavigate() {
         focusIndex = -1;
+        pinned = false;
         clearFocusMarks();
       },
       showHelp: () => toggleHelp(true),
@@ -4345,9 +4420,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.4" : "0.0.0-dev";
+  var VERSION = true ? "1.0.5" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "539a27b" : "dev";
+  var BUILD = true ? "efb0f7d" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

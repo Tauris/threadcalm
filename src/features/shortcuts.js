@@ -50,6 +50,8 @@ const TRANSLATE_MODES = ['compact', 'known', 'hide', 'off'];
 
 export function createShortcuts({ expander, copyTools, readingMode, panel, quietChrome }) {
   let focusIndex = -1;
+  /** Whether focusIndex was chosen with j/k, rather than inferred. */
+  let pinned = false;
   let overlay = null;
   let unsubscribeHelp = null;
 
@@ -67,15 +69,27 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
     }
   }
 
-  /** The post the shortcuts act on: the focused one, else the topmost visible. */
+  /**
+   * The post the shortcuts act on.
+   *
+   * The one chosen with j/k, if there is one and it is still on screen;
+   * otherwise whatever the reader is looking at *now*. This used to remember
+   * the topmost post from the first press and reuse it for good, so after
+   * scrolling, c kept copying the post from where the reader had been rather
+   * than where they were. Only an explicit j/k is a choice worth keeping.
+   */
   function currentPost() {
     const list = posts();
     if (list.length === 0) return null;
-    if (focusIndex >= 0 && focusIndex < list.length) return list[focusIndex];
+
+    if (pinned && focusIndex >= 0 && focusIndex < list.length) {
+      const chosen = list[focusIndex];
+      const { top, bottom } = chosen.getBoundingClientRect();
+      if (bottom > 0 && top < window.innerHeight) return chosen;
+    }
 
     const firstVisible = list.findIndex((post) => post.getBoundingClientRect().bottom > 80);
-    focusIndex = firstVisible >= 0 ? firstVisible : 0;
-    return list[focusIndex];
+    return list[firstVisible >= 0 ? firstVisible : 0];
   }
 
   function moveFocus(delta) {
@@ -93,6 +107,7 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       focusIndex = Math.min(list.length - 1, Math.max(0, focusIndex + delta));
     }
 
+    pinned = true;
     clearFocusMarks();
     const post = list[focusIndex];
     post.classList.add(FOCUS_CLASS);
@@ -280,6 +295,7 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
     },
     onNavigate() {
       focusIndex = -1;
+      pinned = false;
       clearFocusMarks();
     },
     showHelp: () => toggleHelp(true),

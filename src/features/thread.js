@@ -16,7 +16,14 @@
  * user is already looking at needs none of that, which is the whole reason
  * this is a userscript.
  */
-import { ACTION_ROW_SELECTOR, POST_SELECTOR, normalizeText, isVisible, visibleText } from '../core/dom.js';
+import {
+  ACTION_ROW_SELECTOR,
+  POST_SELECTOR,
+  allPosts,
+  isVisible,
+  normalizeText,
+  visibleText,
+} from '../core/dom.js';
 
 /**
  * Control labels that sit inside a post but are chrome, not content.
@@ -44,13 +51,43 @@ const RELATIVE_TIME =
  * Preference order: an explicit link to a user profile, then a heading, then
  * the first non-empty line of the header region.
  */
+/**
+ * Text that is a person's initials rather than their name: "KJ", "A".
+ *
+ * Engage draws an avatar with no photo as the author's initials, and makes it
+ * a profile link like the name beside it. Taking the first profile link in a
+ * post therefore took the initials whenever the avatar came first -- which is
+ * how a thread's opening post was copied as "## KJ".
+ */
+const INITIALS = /^\p{Lu}{1,3}$/u;
+
+/** A person's initials, derived from their name, for matching an avatar. */
+function initialsOf(name) {
+  return name
+    .split(/\s+/)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toLocaleUpperCase();
+}
+
+const PROFILE_LINK_SELECTOR =
+  'a[href*="/users/"], a[href*="/people/"], a[href*="userId="], a[data-testid*="author" i]';
+
 function extractAuthor(article) {
-  const profileLink = article.querySelector(
-    'a[href*="/users/"], a[href*="/people/"], a[href*="userId="], a[data-testid*="author" i]',
-  );
-  if (profileLink) {
-    const name = normalizeText(visibleText(profileLink));
-    if (name && name.length < 80) return name;
+  // Every profile link, not just the first: an initials-only avatar is a
+  // profile link too, and often comes before the name. Visible text is tried
+  // before the naming attributes, and anything that is only initials is
+  // passed over -- a later link, or the action label below, has the name.
+  for (const link of article.querySelectorAll(PROFILE_LINK_SELECTOR)) {
+    const candidates = [
+      visibleText(link),
+      link.getAttribute('aria-label'),
+      link.getAttribute('title'),
+    ];
+    for (const candidate of candidates) {
+      const name = normalizeText(candidate);
+      if (name && name.length < 80 && !INITIALS.test(name)) return name;
+    }
   }
 
   // The action buttons name their post's author: "Like - <name>'s post".
@@ -158,10 +195,16 @@ function extractBody(article) {
     return true;
   });
 
-  // The first kept line is almost always the author name repeated from the
-  // header; drop it only when it matches exactly, never on a guess.
+  // The first kept lines are almost always the header repeated: the avatar's
+  // initials, then the author's name. Drop them only when they match exactly,
+  // never on a guess -- a body that happens to open with two capitals stays.
   const author = extractAuthor(article);
-  if (kept[0] && kept[0] === author) kept.shift();
+  const header = new Set([author, initialsOf(author)]);
+  let dropped = 0;
+  while (kept.length > 0 && dropped < 2 && header.has(kept[0])) {
+    kept.shift();
+    dropped += 1;
+  }
 
   return kept.join('\n');
 }
@@ -208,6 +251,107 @@ export function extractPost(article, depth = 0) {
   // A container with neither text nor replies carries no information.
   if (!post.body && replies.length === 0) return null;
   return post;
+}
+
+/** What Engage marks the first post of a conversation with. */
+const STARTER_SELECTOR = '.qaThreadStarter';
+
+/** Indentation difference, in pixels, below which two posts count as level. */
+const INDENT_TOLERANCE = 2;
+
+/**
+ * The posts that make up the conversation `post` belongs to, in reading order.
+ *
+ * Engage's conversation layout does not nest a reply inside the post it
+ * answers: the starter and every comment are siblings, one after another. So
+ * a thread cannot be read by descending into one element -- doing that is what
+ * copied a lone reply. Here a thread is its starter plus every post after it,
+ * up to the next starter.
+ *
+ * Returns null where that layout is not what the page uses -- no starter at
+ * all, or comments genuinely nested inside the starter -- and the caller falls
+ * back to reading the post's own subtree, which is right for those layouts.
+ *
+ * @param {Element} post
+ * @returns {HTMLElement[]|null}
+ */
+export function threadMembers(post) {
+  if (!(post instanceof HTMLElement)) return null;
+
+  const all = allPosts();
+  const index = all.findIndex(
+    (candidate) => candidate === post || candidate.contains(post) || post.contains(candidate),
+  );
+  if (index < 0) return null;
+
+  const isStarter = (candidate) => candidate.matches(STARTER_SELECTOR);
+
+  let start = index;
+  while (start >= 0 && !isStarter(all[start])) start -= 1;
+  if (start < 0) return null;
+
+  let end = start + 1;
+  while (end < all.length && !isStarter(all[end])) end += 1;
+
+  const members = all.slice(start, end);
+
+  // Comments inside the starter's own element are the nested layout, which
+  // extractPost already reads; treating them as siblings would copy them twice.
+  const starter = members[0];
+  if (members.length > 1 && members.slice(1).every((member) => starter.contains(member))) {
+    return null;
+  }
+  return members;
+}
+
+/**
+ * Reads a sibling-layout conversation into one tree.
+ *
+ * Nesting exists only visually there, as indentation: a reply to a comment is
+ * drawn further right than the comment it answers. So each post's parent is
+ * the nearest earlier post that sits further left. That is one layout read per
+ * post, which is acceptable because it happens only when someone asks to copy.
+ *
+ * @param {HTMLElement[]} members the starter first, then the rest in order
+ * @returns {ExtractedPost|null}
+ */
+export function extractThread(members) {
+  if (!members?.length) return null;
+
+  const [starter, ...rest] = members;
+  const root = extractPost(starter) ?? {
+    author: extractAuthor(starter),
+    body: '',
+    timestamp: extractTimestamp(starter),
+    permalink: extractPermalink(starter),
+    replies: [],
+  };
+
+  const stack = [{ node: root, left: starter.getBoundingClientRect().left }];
+  for (const member of rest) {
+    const node = extractPost(member);
+    if (!node) continue;
+    const { left } = member.getBoundingClientRect();
+
+    while (stack.length > 1 && stack[stack.length - 1].left >= left - INDENT_TOLERANCE) {
+      stack.pop();
+    }
+    stack[stack.length - 1].node.replies.push(node);
+    stack.push({ node, left });
+  }
+  return root;
+}
+
+/**
+ * The element whose subtree holds the whole conversation, for expanding it.
+ * The nearest ancestor containing both its first and its last post.
+ */
+export function threadScope(members) {
+  if (!members?.length) return null;
+  const last = members[members.length - 1];
+  let node = members[0];
+  while (node && !node.contains(last)) node = node.parentElement;
+  return node;
 }
 
 /** Total posts in a tree, including the root. */

@@ -18,7 +18,14 @@ import { copyToClipboard } from '../core/gm.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
 import { icon } from '../ui/icons.js';
-import { countPosts, extractPost, renderThread } from './thread.js';
+import {
+  countPosts,
+  extractPost,
+  extractThread,
+  renderThread,
+  threadMembers,
+  threadScope,
+} from './thread.js';
 
 export const CHIP_CLASS = 'tc-chip';
 export const HOST_CLASS = 'tc-post';
@@ -79,8 +86,15 @@ export function createCopyTools({ expander }) {
       return false;
     }
 
+    // The conversation this post belongs to, not the post alone. On Engage's
+    // conversation layout a reply is a sibling of the post it answers, so
+    // reading one element's subtree yields just that element.
+    let members = threadMembers(article);
+
     if (expandFirst && expander) {
-      const clicks = expander.expandWithin(article);
+      // Expand the whole conversation: "Show previous comments" sits between
+      // posts, not inside any of them, so expanding only the post misses it.
+      const clicks = expander.expandWithin(members ? threadScope(members) : article);
       if (clicks > 0) {
         toast(`Expanding ${clicks} more section${clicks === 1 ? '' : 's'}…`);
         // One settle period is enough for the replies already requested; a
@@ -88,10 +102,12 @@ export function createCopyTools({ expander }) {
         await new Promise((resolve) =>
           setTimeout(resolve, settings.get('expand.settleDelayMs')),
         );
+        // Expansion rendered more replies, so the thread has to be read again.
+        if (members) members = threadMembers(members[0]) ?? members;
       }
     }
 
-    const post = extractPost(article);
+    const post = members ? extractThread(members) : extractPost(article);
     if (!post) {
       toast('Could not read this post', 'warn');
       return false;
@@ -112,7 +128,9 @@ export function createCopyTools({ expander }) {
 
   /** Copies the post's permalink, falling back to the current page URL. */
   async function copyLink(article) {
-    const post = article ? extractPost(article) : null;
+    // The thread's link, even when the chip or focus is on one of its replies.
+    const source = threadMembers(article)?.[0] ?? article;
+    const post = source ? extractPost(source) : null;
     const url = post?.permalink ?? location.href;
     const copied = await copyToClipboard(url);
     toast(copied ? 'Link copied' : 'Clipboard was blocked by the browser', copied ? 'info' : 'warn');
