@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-09-24
+
+### Fixed
+
+- **The Greasy Fork listing garbled umlauts, dashes and other non-ASCII characters.** GitHub serves
+  the listing as UTF-8 and says so, but Greasy Fork's preview of synced additional info read it as a
+  single-byte encoding. The listing is now plain ASCII, with HTML entities (`&ouml;`, `&mdash;`,
+  `&copy;`) for everything else, which render identically whatever encoding is assumed; a test
+  keeps it that way. No change to the script.
+
 ## [1.0.7] - 2026-09-24
 
 ### Added
@@ -278,6 +288,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.0.8]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.8
 [1.0.7]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.7
 [1.0.6]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.6
 [1.0.5]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.5

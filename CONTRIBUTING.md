@@ -120,7 +120,8 @@ exactly as a stale stable one does.
    If the release changes anything [docs/GREASYFORK.md](docs/GREASYFORK.md) describes, update it
    in the same commit. Greasy Fork syncs its description from that file, so it is the listing
    people read before installing. Keep its links absolute: it is rendered on Greasy Fork, where a
-   relative link would point at the wrong site.
+   relative link would point at the wrong site. Keep it plain ASCII too, writing `&ouml;`,
+   `&mdash;` and the like: Greasy Fork reads the synced file in the wrong encoding otherwise.
 3. `npm run check`, then commit the rebuilt `dist/` — it is the file people install.
 4. Tag `vX.Y.Z`.
 

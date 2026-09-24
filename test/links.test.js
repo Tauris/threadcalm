@@ -121,9 +121,20 @@ describe('the Greasy Fork listing', () => {
     for (const target of targets) expect(target, target).toMatch(/^https:\/\//);
   });
 
-  it('names the copyright holder the licence does', () => {
+  it('is plain ASCII, with HTML entities for anything else', () => {
+    // GitHub serves this file as UTF-8 and says so, but Greasy Fork's preview
+    // of synced additional info read it as a single-byte encoding and mangled
+    // every umlaut and dash. Entities survive any decoder.
     const listing = readFileSync('docs/GREASYFORK.md', 'utf8');
-    expect(listing).toContain(COPYRIGHT_HOLDER);
+    const outside = [...listing].filter((char) => char.codePointAt(0) > 127);
+    expect(outside).toEqual([]);
+  });
+
+  it('names the copyright holder the licence does', () => {
+    // Written as entities in the listing, so compare against those.
+    const listing = readFileSync('docs/GREASYFORK.md', 'utf8');
+    const asEntities = COPYRIGHT_HOLDER.replace(/ö/g, '&ouml;').replace(/ü/g, '&uuml;');
+    expect(listing).toContain(asEntities);
   });
 });
 
