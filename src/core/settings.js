@@ -91,6 +91,13 @@ export const SCHEMA = [
     help: 'Restricting to single threads keeps the main feed short.',
   },
   {
+    key: 'expand.overview',
+    type: 'boolean',
+    default: false,
+    label: 'Overview: keep feeds compact',
+    help: 'For skimming. On a feed nothing opens by itself — neither replies nor long posts — so you see many posts at a glance; o opens the one you are on. A single conversation still opens as usual, and translation is unaffected. Press v to switch.',
+  },
+  {
     key: 'expand.truncatedText',
     type: 'boolean',
     default: true,

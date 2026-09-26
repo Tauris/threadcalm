@@ -28,6 +28,7 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
     : `v${version} · ${channel} · ${stamp}`;
   let panel = null;
   let readingPill = null;
+  let overviewPill = null;
   let statusText = null;
   let pauseButton = null;
   let sheet = null;
@@ -83,6 +84,15 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
           title: 'Reading mode is on. Click, or press r, to return to your own settings.',
           hidden: !settings.getOwn('reading.enabled'),
           on: { click: () => settings.update({ 'reading.enabled': false }) },
+        })),
+        // Says feeds are being kept compact, and is the way out of it.
+        (overviewPill = el('button', {
+          type: 'button',
+          className: 'tc-mode-pill',
+          text: 'Overview',
+          title: 'Overview is on: feeds stay compact. Click, or press v, to let them open again.',
+          hidden: !settings.getOwn('expand.overview'),
+          on: { click: () => settings.update({ 'expand.overview': false }) },
         })),
         el('span', {
           className: 'tc-stamp',
@@ -566,6 +576,9 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
         bus.on(EVENTS.EXPAND_STATE, onState),
         bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
           if ('general.showPanel' in changed) applyVisibility();
+          if ('expand.overview' in changed && overviewPill) {
+            overviewPill.hidden = !settings.getOwn('expand.overview');
+          }
           if ('reading.enabled' in changed && readingPill) {
             readingPill.hidden = !settings.getOwn('reading.enabled');
           }

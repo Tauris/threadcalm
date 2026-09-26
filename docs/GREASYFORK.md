@@ -31,7 +31,7 @@ else waits until you switch it on.
 
 ## Keyboard
 
-`j` / `k` next and previous post &middot; `c` copy the thread &middot; `y` copy its link &middot; `o` expand &middot;
+`j` / `k` next and previous post &middot; `c` copy the thread &middot; `y` copy its link &middot; `o` expand &middot; `v` overview &middot;
 `e` pause expansion &middot; `Shift+T` automatic translation &middot; `a` hide the action bars &middot; `r` reading mode &middot; `s` settings &middot; `?` all shortcuts
 
 ## Privacy

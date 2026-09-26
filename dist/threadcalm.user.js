@@ -774,6 +774,13 @@
       help: "Restricting to single threads keeps the main feed short."
     },
     {
+      key: "expand.overview",
+      type: "boolean",
+      default: false,
+      label: "Overview: keep feeds compact",
+      help: "For skimming. On a feed nothing opens by itself — neither replies nor long posts — so you see many posts at a glance; o opens the one you are on. A single conversation still opens as usual, and translation is unaffected. Press v to switch."
+    },
+    {
       key: "expand.truncatedText",
       type: "boolean",
       default: true,
@@ -1959,9 +1966,11 @@
         limitReached
       });
     }
-    function inScope() {
+    function inScope({ explicit = false } = {}) {
       if (!get("expand.enabled") || paused) return false;
-      return get("expand.scope") !== "thread" || isThreadView();
+      if (isThreadView()) return true;
+      if (get("expand.overview") && !explicit) return false;
+      return get("expand.scope") !== "thread";
     }
     function isMenuLike(element, texts) {
       const popup = element.getAttribute("aria-haspopup");
@@ -2119,9 +2128,9 @@
       }
       return clicks;
     }
-    function scan({ deferTruncation = true } = {}) {
+    function scan({ deferTruncation = true, explicit = false } = {}) {
       scanTimer = null;
-      if (!running || !inScope()) return;
+      if (!running || !inScope({ explicit })) return;
       dirty = false;
       scans += 1;
       pruneWaiting();
@@ -2204,6 +2213,7 @@
         dirty = true;
         publishState();
         schedule();
+        scheduleOpen();
       },
       /** Re-reads label packs after the user edits languages or patterns. */
       setMatchers(next) {
@@ -2215,7 +2225,7 @@
       /** "Expand everything on this page": opens every post, seen or not. */
       rescan() {
         reset2();
-        scan({ deferTruncation: false });
+        scan({ deferTruncation: false, explicit: true });
       },
       pause() {
         paused = true;
@@ -2591,6 +2601,7 @@
     { keys: ["j"], label: "Next post" },
     { keys: ["k"], label: "Previous post" },
     { keys: ["o"], label: "Expand the focused post" },
+    { keys: ["v"], label: "Overview: keep feeds compact, or open them again" },
     { keys: ["c"], label: "Copy the focused thread" },
     { keys: ["y"], label: "Copy a link to the focused thread" },
     { keys: ["e"], label: "Pause or resume automatic expansion (pausing also stops automatic translation)" },
@@ -2762,6 +2773,14 @@
         case "y":
           copyTools.copyLink(currentPost());
           break;
+        case "v": {
+          const on = !get("expand.overview");
+          update({ "expand.overview": on });
+          toast(
+            on ? "Overview on — feeds stay compact. o opens a post, v to leave." : "Overview off — replies and long posts open again."
+          );
+          break;
+        }
         case "e": {
           const paused = expander.togglePause();
           toast(paused ? "Expansion paused" : "Expansion resumed");
@@ -3175,6 +3194,7 @@
     const buildLabel = channel === "stable" ? `v${version} · ${stamp}` : `v${version} · ${channel} · ${stamp}`;
     let panel = null;
     let readingPill = null;
+    let overviewPill = null;
     let statusText = null;
     let pauseButton = null;
     let sheet = null;
@@ -3221,6 +3241,15 @@
             title: "Reading mode is on. Click, or press r, to return to your own settings.",
             hidden: !getOwn("reading.enabled"),
             on: { click: () => update({ "reading.enabled": false }) }
+          }),
+          // Says feeds are being kept compact, and is the way out of it.
+          overviewPill = el("button", {
+            type: "button",
+            className: "tc-mode-pill",
+            text: "Overview",
+            title: "Overview is on: feeds stay compact. Click, or press v, to let them open again.",
+            hidden: !getOwn("expand.overview"),
+            on: { click: () => update({ "expand.overview": false }) }
           }),
           el("span", {
             className: "tc-stamp",
@@ -3622,6 +3651,9 @@
           bus.on(EVENTS.EXPAND_STATE, onState),
           bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
             if ("general.showPanel" in changed) applyVisibility();
+            if ("expand.overview" in changed && overviewPill) {
+              overviewPill.hidden = !getOwn("expand.overview");
+            }
             if ("reading.enabled" in changed && readingPill) {
               readingPill.hidden = !getOwn("reading.enabled");
             }
@@ -5061,7 +5093,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   // src/main.js
   var VERSION = true ? "1.1.1" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "6c1c5e7" : "dev";
+  var BUILD = true ? "6121f8b" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

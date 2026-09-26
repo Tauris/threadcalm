@@ -44,6 +44,7 @@ per-page click limit has been reached.
 |---|---|
 | <kbd>j</kbd> / <kbd>k</kbd> | Next / previous post |
 | <kbd>o</kbd> | Expand the focused post |
+| <kbd>v</kbd> | Overview: keep feeds compact, or let them open again |
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
@@ -84,6 +85,18 @@ and the text check are kept, because either alone has been seen to miss.
 
 **Where to expand** decides whether this runs on the feed as well as inside a single thread.
 Restricting it to single threads keeps the main feed short.
+
+**Overview** (<kbd>v</kbd>) is the same idea as a key, for skimming. While it is on, nothing on a
+feed opens by itself — neither replies nor long posts — so you see many posts at a glance. The
+panel shows an *Overview* pill; click it, or press <kbd>v</kbd> again, and the feed opens as usual.
+
+- <kbd>o</kbd> opens the post you are on, and <kbd>c</kbd> still copies a whole thread.
+- A single conversation opens regardless: opening one is a request to read it.
+- Translation carries on, so a feed in other languages stays readable while you skim.
+- It is remembered until you switch it off. Posts already open are not closed again.
+
+It is not the same as pausing with <kbd>e</kbd>. Pausing is the emergency stop: it halts every
+click, automatic translation included, and lasts until you resume or reload.
 
 **The limits exist to stop a runaway.** If Engage ever changes its labels such that something
 unexpected matches, the per-page ceiling bounds the damage. It resets on navigation. If you
@@ -397,6 +410,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 |---|---|
 | Expand threads automatically | on |
 | Where to expand | Feed and single threads |
+| Overview: keep feeds compact | off |
 | Expand truncated post text | on |
 | Max clicks per pass | 40 |
 | Max clicks per page visit | 1500 |

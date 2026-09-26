@@ -124,9 +124,18 @@ export function createExpander({ matchers, IntersectionObserverImpl = globalThis
   }
 
   /** True when the script should be expanding on the current route. */
-  function inScope() {
+  /**
+   * Whether automatic expansion should run here.
+   *
+   * Overview keeps feeds compact for skimming; a single conversation is a
+   * request to read it, so it expands regardless. An explicit request
+   * ("expand everything on this page") overrides overview, not a pause.
+   */
+  function inScope({ explicit = false } = {}) {
     if (!settings.get('expand.enabled') || paused) return false;
-    return settings.get('expand.scope') !== 'thread' || isThreadView();
+    if (isThreadView()) return true;
+    if (settings.get('expand.overview') && !explicit) return false;
+    return settings.get('expand.scope') !== 'thread';
   }
 
   function isMenuLike(element, texts) {
@@ -348,9 +357,9 @@ export function createExpander({ matchers, IntersectionObserverImpl = globalThis
     return clicks;
   }
 
-  function scan({ deferTruncation = true } = {}) {
+  function scan({ deferTruncation = true, explicit = false } = {}) {
     scanTimer = null;
-    if (!running || !inScope()) return;
+    if (!running || !inScope({ explicit })) return;
 
     dirty = false;
     scans += 1;
@@ -452,6 +461,8 @@ export function createExpander({ matchers, IntersectionObserverImpl = globalThis
       dirty = true;
       publishState();
       schedule();
+      // Leaving overview: long posts already on screen open without a scroll.
+      scheduleOpen();
     },
 
     /** Re-reads label packs after the user edits languages or patterns. */
@@ -465,7 +476,7 @@ export function createExpander({ matchers, IntersectionObserverImpl = globalThis
     /** "Expand everything on this page": opens every post, seen or not. */
     rescan() {
       reset();
-      scan({ deferTruncation: false });
+      scan({ deferTruncation: false, explicit: true });
     },
 
     pause() {

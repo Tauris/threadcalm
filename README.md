@@ -59,6 +59,7 @@ live behind its **Settings** button, and the script also registers commands in t
 |---|---|
 | <kbd>j</kbd> / <kbd>k</kbd> | Next / previous post |
 | <kbd>o</kbd> | Expand the focused post |
+| <kbd>v</kbd> | Overview: keep feeds compact, or let them open again |
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |

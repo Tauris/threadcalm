@@ -34,6 +34,7 @@ export const BINDINGS = [
   { keys: ['j'], label: 'Next post' },
   { keys: ['k'], label: 'Previous post' },
   { keys: ['o'], label: 'Expand the focused post' },
+  { keys: ['v'], label: 'Overview: keep feeds compact, or open them again' },
   { keys: ['c'], label: 'Copy the focused thread' },
   { keys: ['y'], label: 'Copy a link to the focused thread' },
   { keys: ['e'], label: 'Pause or resume automatic expansion (pausing also stops automatic translation)' },
@@ -243,6 +244,16 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       case 'y':
         copyTools.copyLink(currentPost());
         break;
+      case 'v': {
+        const on = !settings.get('expand.overview');
+        settings.update({ 'expand.overview': on });
+        toast(
+          on
+            ? 'Overview on \u2014 feeds stay compact. o opens a post, v to leave.'
+            : 'Overview off \u2014 replies and long posts open again.',
+        );
+        break;
+      }
       case 'e': {
         const paused = expander.togglePause();
         toast(paused ? 'Expansion paused' : 'Expansion resumed');

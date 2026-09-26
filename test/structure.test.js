@@ -346,3 +346,72 @@ describe('opening long posts as they come on screen', () => {
     expect(viewer.unobserve).toHaveBeenCalledWith(body);
   });
 });
+
+describe('overview', () => {
+  let expander;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    settings.update({ 'expand.overview': true });
+  });
+
+  afterEach(() => {
+    expander?.stop();
+    vi.useRealTimers();
+  });
+
+  /** A feed post with a reply counter and a long body. */
+  function feedPost() {
+    const { post, more } = engagePost();
+    const counter = document.createElement('button');
+    counter.textContent = '3 replies';
+    post.append(counter);
+    const replies = vi.fn();
+    const seeMore = vi.fn();
+    counter.addEventListener('click', replies);
+    more.addEventListener('click', seeMore);
+    return { post, replies, seeMore };
+  }
+
+  function start() {
+    expander = createExpander({ matchers, IntersectionObserverImpl: undefined });
+    expander.start();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs') * 4);
+  }
+
+  it('keeps a feed as Engage shows it', () => {
+    const { replies, seeMore } = feedPost();
+    start();
+    expect(replies).not.toHaveBeenCalled();
+    expect(seeMore).not.toHaveBeenCalled();
+  });
+
+  it('still opens a single conversation', () => {
+    window.history.replaceState({}, '', '/main/threads/abc');
+    const { replies } = feedPost();
+    start();
+    expect(replies).toHaveBeenCalledTimes(1);
+  });
+
+  it('still opens the post you ask for, and everything when asked', () => {
+    const { post, replies, seeMore } = feedPost();
+    start();
+    expander.expandWithin(post);
+    expect(replies).toHaveBeenCalledTimes(1);
+    expect(seeMore).toHaveBeenCalledTimes(1);
+
+    document.body.innerHTML = '';
+    const other = feedPost();
+    expander.rescan();
+    expect(other.replies).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the feed open again when switched off', () => {
+    const { replies } = feedPost();
+    start();
+    settings.update({ 'expand.overview': false });
+    expander.onSettingsChanged({ 'expand.overview': false });
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs') * 4);
+    expect(replies).toHaveBeenCalledTimes(1);
+  });
+});
