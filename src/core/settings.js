@@ -91,11 +91,18 @@ export const SCHEMA = [
     help: 'Restricting to single threads keeps the main feed short.',
   },
   {
+    key: 'expand.overview',
+    type: 'boolean',
+    default: false,
+    label: 'Overview: keep feeds compact',
+    help: 'For skimming. On a feed nothing opens by itself — neither replies nor long posts — so you see many posts at a glance; o opens the one you are on. A single conversation still opens as usual, and translation is unaffected. Press v to switch.',
+  },
+  {
     key: 'expand.truncatedText',
     type: 'boolean',
     default: true,
     label: 'Expand truncated post text',
-    help: 'Also click "See more" inside a post body.',
+    help: 'Also open "See more" inside a post body — each post once it has been on screen for a moment, so a long feed is not unfolded in the background. The o key and copying open every post they cover at once.',
   },
   {
     key: 'expand.maxClicksPerScan',
@@ -181,7 +188,7 @@ export const SCHEMA = [
     type: 'boolean',
     default: false,
     label: 'Automatic translation',
-    help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off.',
+    help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off.',
   },
 
   // -- Post chrome ---------------------------------------------------------

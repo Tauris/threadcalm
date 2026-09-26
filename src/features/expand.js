@@ -20,7 +20,11 @@
  *     here, because it also names unrelated controls.
  *  4. A truncation control inside a post body ("See more"). Accepted only
  *     within a recognised post container, which is what makes the bare label
- *     safe.
+ *     safe. Unlike the others it is not clicked as soon as it is found: a
+ *     post is opened once it has been on screen for a moment, the way
+ *     automatic translation works, so a long feed is not unfolded in the
+ *     background. An explicit request -- the o key, copying a thread, "expand
+ *     everything" -- still opens every post it covers at once.
  *
  * Anything that looks like a menu is rejected outright: opening the post
  * overflow menu on every post in a feed was the worst early failure mode.
@@ -28,6 +32,7 @@
 import { bus, EVENTS } from '../core/bus.js';
 import {
   accessibleTexts,
+  BODY_WRAPPER_SELECTOR,
   closestPost,
   hasIconSignature,
   isBodyLinkButton,
@@ -56,7 +61,14 @@ const MAX_LABEL_LENGTH = 120;
  */
 const LEADING_DIGIT = /^\p{Nd}/u;
 
-export function createExpander({ matchers }) {
+/**
+ * How long a truncated post must be on screen before it is opened. Shorter
+ * than translation's wait, because opening a post costs no request; long
+ * enough that scrolling past does not unfold everything on the way.
+ */
+export const OPEN_DWELL_MS = 300;
+
+export function createExpander({ matchers, IntersectionObserverImpl = globalThis.IntersectionObserver }) {
   let active = matchers;
 
   let running = true;
@@ -89,9 +101,18 @@ export function createExpander({ matchers }) {
   // freely but a given DOM node only ever needs to be opened once. A WeakSet
   // also lets detached nodes be collected after a re-render.
   let clicked = new WeakSet();
-  // Posts whose "see more" has been clicked. Recognised by structure alone,
-  // "see more" and "see less" are the same button, so a post is expanded once.
+  // Body wrappers whose "see more" has been clicked. The control may be
+  // replaced during a render, but another body in the same container is independent.
   let expandedBodies = new WeakSet();
+
+  // Truncated posts waiting to come on screen. Keyed by the body wrapper (or
+  // the post, or the control), which is what the observer watches. A Map, not
+  // a WeakMap: the observer holds its targets strongly, so removed ones must
+  // be found and released (see pruneWaiting).
+  let viewer = null;
+  const waiting = new Map();
+  const onScreenSince = new Map();
+  let openTimer = null;
 
   function publishState() {
     bus.emit(EVENTS.EXPAND_STATE, {
@@ -103,9 +124,18 @@ export function createExpander({ matchers }) {
   }
 
   /** True when the script should be expanding on the current route. */
-  function inScope() {
+  /**
+   * Whether automatic expansion should run here.
+   *
+   * Overview keeps feeds compact for skimming; a single conversation is a
+   * request to read it, so it expands regardless. An explicit request
+   * ("expand everything on this page") overrides overview, not a pause.
+   */
+  function inScope({ explicit = false } = {}) {
     if (!settings.get('expand.enabled') || paused) return false;
-    return settings.get('expand.scope') !== 'thread' || isThreadView();
+    if (isThreadView()) return true;
+    if (settings.get('expand.overview') && !explicit) return false;
+    return settings.get('expand.scope') !== 'thread';
   }
 
   function isMenuLike(element, texts) {
@@ -151,7 +181,7 @@ export function createExpander({ matchers }) {
     // "see more" by structure: an inline link button inside the post body.
     // Holds in every interface language; wording below is the fallback.
     if (settings.get('expand.truncatedText') && isBodyLinkButton(element)) {
-      if (expandedBodies.has(closestPost(element))) return null;
+      if (expandedBodies.has(element.closest(BODY_WRAPPER_SELECTOR))) return null;
       return isVisible(element) ? 'truncation' : null;
     }
 
@@ -171,6 +201,8 @@ export function createExpander({ matchers }) {
     ) {
       // A bare "See more" is only trustworthy inside a post.
       if (!closestPost(element)) return null;
+      const body = element.closest(BODY_WRAPPER_SELECTOR);
+      if (body && expandedBodies.has(body)) return null;
       return isVisible(element) ? 'truncation' : null;
     }
     return null;
@@ -202,7 +234,104 @@ export function createExpander({ matchers }) {
     return found;
   }
 
-  function clickBatch(root = document) {
+  /** What the observer watches for a truncation control. */
+  function viewTarget(control) {
+    return control.closest(BODY_WRAPPER_SELECTOR) ?? closestPost(control) ?? control;
+  }
+
+  function stopWaiting(target) {
+    viewer?.unobserve(target);
+    waiting.delete(target);
+    onScreenSince.delete(target);
+  }
+
+  function pruneWaiting() {
+    for (const target of [...waiting.keys()]) if (!target.isConnected) stopWaiting(target);
+  }
+
+  function clearWaiting() {
+    viewer?.disconnect();
+    viewer = null;
+    waiting.clear();
+    onScreenSince.clear();
+    clearTimeout(openTimer);
+    openTimer = null;
+  }
+
+  /** Defers a truncation control until its post is on screen. */
+  function openWhenSeen(control) {
+    const target = viewTarget(control);
+    if (!viewer) viewer = new IntersectionObserverImpl(onViewed, { threshold: 0 });
+    if (!waiting.has(target)) viewer.observe(target);
+    // Always the latest control: Engage may have re-rendered it.
+    waiting.set(target, control);
+  }
+
+  function onViewed(entries) {
+    const now = Date.now();
+    for (const { target, isIntersecting, intersectionRatio } of entries) {
+      if (!waiting.has(target)) continue;
+      if (isIntersecting && intersectionRatio > 0) {
+        if (!onScreenSince.has(target)) onScreenSince.set(target, now);
+      } else {
+        onScreenSince.delete(target);
+      }
+    }
+    scheduleOpen();
+  }
+
+  function scheduleOpen() {
+    clearTimeout(openTimer);
+    openTimer = null;
+    if (!running || !inScope() || onScreenSince.size === 0) return;
+    const due = Math.min(...onScreenSince.values()) + OPEN_DWELL_MS;
+    openTimer = setTimeout(openSeen, Math.max(0, due - Date.now()));
+  }
+
+  /** Opens every waiting post that has now been on screen long enough. */
+  function openSeen() {
+    openTimer = null;
+    if (!running || !inScope() || !settings.get('expand.truncatedText')) return;
+    const maxTotal = settings.get('expand.maxTotalClicks');
+    const now = Date.now();
+    let clicks = 0;
+    for (const [target, since] of [...onScreenSince]) {
+      if (since + OPEN_DWELL_MS > now) continue;
+      const control = waiting.get(target);
+      stopWaiting(target);
+      if (totalClicks >= maxTotal) break;
+      // Checked now, not when found: it may have been opened meanwhile.
+      if (!control?.isConnected || clicked.has(control) || classify(control) !== 'truncation') continue;
+      if (clickControl('truncation', control)) clicks += 1;
+    }
+    if (clicks > 0) bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
+    scheduleOpen();
+  }
+
+  function clickControl(kind, target) {
+    clicked.add(target);
+    if (kind === 'truncation') {
+      const body = target.closest(BODY_WRAPPER_SELECTOR);
+      if (body) expandedBodies.add(body);
+    }
+    try {
+      target.click();
+    } catch (error) {
+      log.debug('click failed', error, target);
+      return false;
+    }
+    totalClicks += 1;
+    log.debug(`clicked ${kind}`, target);
+    return true;
+  }
+
+  /**
+   * Clicks what there is to click under `root`.
+   *
+   * With `deferTruncation`, "see more" controls are not clicked but handed to
+   * openWhenSeen -- the automatic scans do that. Explicit requests do not.
+   */
+  function clickBatch(root = document, { deferTruncation = false } = {}) {
     const maxPerScan = settings.get('expand.maxClicksPerScan');
     const maxTotal = settings.get('expand.maxTotalClicks');
 
@@ -215,34 +344,27 @@ export function createExpander({ matchers }) {
       return 0;
     }
 
+    const defer = deferTruncation && typeof IntersectionObserverImpl === 'function';
     let clicks = 0;
     for (const { kind, target } of findControls(root)) {
-      if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
-      clicked.add(target);
-      if (kind === 'truncation') {
-        const post = closestPost(target);
-        if (post) expandedBodies.add(post);
-      }
-      try {
-        target.click();
-      } catch (error) {
-        log.debug('click failed', error, target);
+      if (defer && kind === 'truncation') {
+        openWhenSeen(target);
         continue;
       }
-      clicks += 1;
-      totalClicks += 1;
-      log.debug(`clicked ${kind}`, target);
+      if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
+      if (clickControl(kind, target)) clicks += 1;
     }
     return clicks;
   }
 
-  function scan() {
+  function scan({ deferTruncation = true, explicit = false } = {}) {
     scanTimer = null;
-    if (!running || !inScope()) return;
+    if (!running || !inScope({ explicit })) return;
 
     dirty = false;
     scans += 1;
-    const clicks = clickBatch();
+    pruneWaiting();
+    const clicks = clickBatch(document, { deferTruncation });
     if (clicks > 0) {
       quietPasses = 0;
       bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
@@ -260,7 +382,7 @@ export function createExpander({ matchers }) {
 
   function schedule() {
     if (!running || scanTimer || !inScope()) return;
-    scanTimer = setTimeout(scan, settings.get('expand.scanDelayMs'));
+    scanTimer = setTimeout(() => scan(), settings.get('expand.scanDelayMs'));
   }
 
   /** Beats to wait between checks once the thread has settled and gone quiet. */
@@ -299,6 +421,7 @@ export function createExpander({ matchers }) {
     idleBeats = 0;
     clicked = new WeakSet();
     expandedBodies = new WeakSet();
+    clearWaiting();
     publishState();
   }
 
@@ -316,6 +439,7 @@ export function createExpander({ matchers }) {
       clearTimeout(settleTimer);
       clearInterval(heartbeat);
       scanTimer = settleTimer = heartbeat = null;
+      clearWaiting();
     },
 
     /** Called by the SPA watcher; a new route means new counters. */
@@ -337,6 +461,8 @@ export function createExpander({ matchers }) {
       dirty = true;
       publishState();
       schedule();
+      // Leaving overview: long posts already on screen open without a scroll.
+      scheduleOpen();
     },
 
     /** Re-reads label packs after the user edits languages or patterns. */
@@ -347,16 +473,18 @@ export function createExpander({ matchers }) {
     },
 
     /** Forgets the click history and runs a fresh pass immediately. */
+    /** "Expand everything on this page": opens every post, seen or not. */
     rescan() {
       reset();
-      scan();
+      scan({ deferTruncation: false, explicit: true });
     },
 
     pause() {
       paused = true;
       clearTimeout(scanTimer);
       clearTimeout(settleTimer);
-      scanTimer = settleTimer = null;
+      clearTimeout(openTimer);
+      scanTimer = settleTimer = openTimer = null;
       publishState();
     },
 
@@ -364,6 +492,7 @@ export function createExpander({ matchers }) {
       paused = false;
       publishState();
       schedule();
+      scheduleOpen();
     },
 
     togglePause() {
@@ -374,7 +503,10 @@ export function createExpander({ matchers }) {
 
     isPaused: () => paused,
 
-    /** Expands one subtree only — used by the "expand this post" shortcut. */
+    /**
+     * Expands one subtree only, "see more" included whether on screen or not
+     * -- used by the o key and before copying.
+     */
     expandWithin(root) {
       return clickBatch(root);
     },

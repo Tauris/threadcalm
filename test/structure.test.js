@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
+import { allPosts, closestPost, isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
 import { buildMatchers } from '../src/core/i18n.js';
 import * as settings from '../src/core/settings.js';
-import { createExpander } from '../src/features/expand.js';
+import { OPEN_DWELL_MS, createExpander } from '../src/features/expand.js';
+import { threadMembers } from '../src/features/thread.js';
 import { COMPACT_CLASS, TRANSLATE_DWELL_MS, createTranslateTamer } from '../src/features/translate.js';
 import { stubLayout } from './fixtures.js';
 
@@ -178,5 +179,239 @@ describe('the translation control in any language', () => {
     vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
 
     expect(click).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a thread starter without its own action row', () => {
+  /** The layout from the 1.1.1.18 handoff: the starter holds no action row. */
+  function rowlessThread() {
+    const { post: starter, translation } = engagePost();
+    starter.querySelector('[data-testid="overflow-set"]').remove();
+    const main = starter.parentElement;
+
+    const reply = document.createElement('div');
+    reply.className = 'y-fixedGridColumn';
+    reply.textContent = 'Merci, bien reçu, nous allons regarder cela ensemble demain matin.';
+    const actions = document.createElement('div');
+    actions.setAttribute('data-testid', 'overflow-set');
+    reply.append(actions);
+    main.append(reply);
+    return { starter, translation, reply };
+  }
+
+  it('is still a post', () => {
+    const { starter, translation } = rowlessThread();
+    expect(closestPost(translation)).toBe(starter);
+    expect(allPosts()).toContain(starter);
+  });
+
+  it('comes first, in document order', () => {
+    const { starter, reply } = rowlessThread();
+    expect(allPosts()).toEqual([starter, reply]);
+  });
+
+  it('keeps its translation control recognisable', () => {
+    const { translation } = rowlessThread();
+    expect(isTranslationLinkButton(translation)).toBe(true);
+  });
+
+  it('is copied with its replies', () => {
+    const { starter, reply } = rowlessThread();
+    expect(threadMembers(reply)).toEqual([starter, reply]);
+  });
+
+  it('is not listed twice when a found post already wraps it', () => {
+    const { starter } = rowlessThread();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'y-fixedGridColumn';
+    starter.replaceWith(wrapper);
+    const row = document.createElement('div');
+    row.setAttribute('data-testid', 'overflow-set');
+    wrapper.append(starter, row);
+    expect(allPosts().filter((post) => post === starter)).toHaveLength(0);
+  });
+});
+
+describe('opening long posts as they come on screen', () => {
+  let expander;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    expander?.stop();
+    vi.useRealTimers();
+  });
+
+  /** An expander with a hand-driven IntersectionObserver, after its first scan. */
+  function start() {
+    let notify;
+    const viewer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    const IntersectionObserverImpl = vi.fn((callback) => {
+      notify = callback;
+      return viewer;
+    });
+    expander = createExpander({ matchers, IntersectionObserverImpl });
+    expander.start();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs'));
+    const scroll = (target, onScreen) =>
+      notify([{ target, isIntersecting: onScreen, intersectionRatio: onScreen ? 0.5 : 0 }]);
+    return { viewer, scroll };
+  }
+
+  function longPost() {
+    const { more } = engagePost();
+    const click = vi.fn();
+    more.addEventListener('click', click);
+    return { more, body: more.closest('[class*="contentStateBodyTextWrapper"]'), click };
+  }
+
+  it('waits for the post, rather than opening it on sight', () => {
+    const { body, click } = longPost();
+    const { viewer } = start();
+    expect(viewer.observe).toHaveBeenCalledWith(body);
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('opens it once it has been on screen for a moment', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    vi.advanceTimersByTime(OPEN_DWELL_MS - 1);
+    expect(click).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a post alone that was only scrolled past', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    vi.advanceTimersByTime(OPEN_DWELL_MS / 2);
+    scroll(body, false);
+    vi.advanceTimersByTime(OPEN_DWELL_MS * 10);
+
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing while expansion is paused', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    expander.pause();
+    vi.advanceTimersByTime(OPEN_DWELL_MS * 10);
+    expect(click).not.toHaveBeenCalled();
+
+    expander.resume();
+    vi.advanceTimersByTime(OPEN_DWELL_MS);
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('still opens everything at once when asked: o, copying, expand everything', () => {
+    const { more, click } = longPost();
+    start();
+    expect(expander.expandWithin(more.closest('.qaThreadStarter'))).toBe(1);
+    expect(click).toHaveBeenCalledTimes(1);
+
+    document.body.innerHTML = '';
+    const other = longPost();
+    expander.rescan();
+    expect(other.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('still clicks reply counters without waiting', () => {
+    const { post } = engagePost({ seeMore: null });
+    const counter = document.createElement('button');
+    counter.textContent = '3 replies';
+    post.append(counter);
+    const click = vi.fn();
+    counter.addEventListener('click', click);
+
+    start();
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases posts Engage removed before they were seen', () => {
+    const { body } = longPost();
+    const { viewer } = start();
+
+    body.closest('[role="main"]').remove();
+    expander.onDomChanged();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs'));
+
+    expect(viewer.unobserve).toHaveBeenCalledWith(body);
+  });
+});
+
+describe('overview', () => {
+  let expander;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    settings.update({ 'expand.overview': true });
+  });
+
+  afterEach(() => {
+    expander?.stop();
+    vi.useRealTimers();
+  });
+
+  /** A feed post with a reply counter and a long body. */
+  function feedPost() {
+    const { post, more } = engagePost();
+    const counter = document.createElement('button');
+    counter.textContent = '3 replies';
+    post.append(counter);
+    const replies = vi.fn();
+    const seeMore = vi.fn();
+    counter.addEventListener('click', replies);
+    more.addEventListener('click', seeMore);
+    return { post, replies, seeMore };
+  }
+
+  function start() {
+    expander = createExpander({ matchers, IntersectionObserverImpl: undefined });
+    expander.start();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs') * 4);
+  }
+
+  it('keeps a feed as Engage shows it', () => {
+    const { replies, seeMore } = feedPost();
+    start();
+    expect(replies).not.toHaveBeenCalled();
+    expect(seeMore).not.toHaveBeenCalled();
+  });
+
+  it('still opens a single conversation', () => {
+    window.history.replaceState({}, '', '/main/threads/abc');
+    const { replies } = feedPost();
+    start();
+    expect(replies).toHaveBeenCalledTimes(1);
+  });
+
+  it('still opens the post you ask for, and everything when asked', () => {
+    const { post, replies, seeMore } = feedPost();
+    start();
+    expander.expandWithin(post);
+    expect(replies).toHaveBeenCalledTimes(1);
+    expect(seeMore).toHaveBeenCalledTimes(1);
+
+    document.body.innerHTML = '';
+    const other = feedPost();
+    expander.rescan();
+    expect(other.replies).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the feed open again when switched off', () => {
+    const { replies } = feedPost();
+    start();
+    settings.update({ 'expand.overview': false });
+    expander.onSettingsChanged({ 'expand.overview': false });
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs') * 4);
+    expect(replies).toHaveBeenCalledTimes(1);
   });
 });

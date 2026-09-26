@@ -44,13 +44,14 @@ per-page click limit has been reached.
 |---|---|
 | <kbd>j</kbd> / <kbd>k</kbd> | Next / previous post |
 | <kbd>o</kbd> | Expand the focused post |
+| <kbd>v</kbd> | Overview: keep feeds compact, or let them open again |
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
 | <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Reading mode on or off |
-| <kbd>t</kbd> | Cycle the translation-control mode |
-| <kbd>Shift</kbd>+<kbd>T</kbd> | Switch automatic translation on or off |
+| <kbd>t</kbd> | Switch automatic translation on or off |
+| <kbd>Shift</kbd>+<kbd>T</kbd> | Cycle the translation-control mode |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>s</kbd> | Open settings |
 | <kbd>?</kbd> | Show the shortcut list |
@@ -68,8 +69,14 @@ to render, and repeats until three consecutive passes find nothing left to open.
 
 Reply counters are found **without reading their label**: a native button whose own text starts
 with a digit and which carries Engage's reply glyph. That holds in every interface language, so
-expansion works on a tenant whose language has no label pack. Pagination and `See more` are still
-matched by wording.
+expansion works on a tenant whose language has no label pack. `See more` is recognised by its
+place in the post body the same way; only pagination is still matched by wording.
+
+**Long posts open as you reach them.** Replies are opened as soon as they are found, but a
+truncated post is opened only once it has been on screen for a moment — the way automatic
+translation works — so a long feed is not unfolded in the background and the page does not jump
+under you. Posts you scroll past, or never reach, stay as they are. <kbd>o</kbd>, copying a thread
+and *Expand everything on this page now* still open every post they cover at once.
 
 It will not click the three-dot overflow menu. Controls are rejected when they declare
 `aria-haspopup`, when they are already expanded, when they are disabled, when they have no layout
@@ -79,6 +86,18 @@ and the text check are kept, because either alone has been seen to miss.
 **Where to expand** decides whether this runs on the feed as well as inside a single thread.
 Restricting it to single threads keeps the main feed short.
 
+**Overview** (<kbd>v</kbd>) is the same idea as a key, for skimming. While it is on, nothing on a
+feed opens by itself — neither replies nor long posts — so you see many posts at a glance. The
+panel shows an *Overview* pill; click it, or press <kbd>v</kbd> again, and the feed opens as usual.
+
+- <kbd>o</kbd> opens the post you are on, and <kbd>c</kbd> still copies a whole thread.
+- A single conversation opens regardless: opening one is a request to read it.
+- Translation carries on, so a feed in other languages stays readable while you skim.
+- It is remembered until you switch it off. Posts already open are not closed again.
+
+It is not the same as pausing with <kbd>e</kbd>. Pausing is the emergency stop: it halts every
+click, automatic translation included, and lasts until you resume or reload.
+
 **The limits exist to stop a runaway.** If Engage ever changes its labels such that something
 unexpected matches, the per-page ceiling bounds the damage. It resets on navigation. If you
 genuinely have a thread larger than the ceiling, raise it; if the panel turns red often, that is
@@ -87,7 +106,7 @@ worth reporting.
 ## Translation controls
 
 In a multilingual tenant Engage puts a `Show translation` control under nearly every post, which is
-the noisiest chrome on the page. Four modes, cycled with <kbd>t</kbd>:
+the noisiest chrome on the page. Four modes, cycled with <kbd>Shift</kbd>+<kbd>T</kbd>:
 
 | Mode | Behaviour |
 |---|---|
@@ -103,11 +122,11 @@ is not what the author wrote.
 ### Automatic translation
 
 Off by default. Switch on **Automatic translation** — in the settings, or with
-<kbd>Shift</kbd>+<kbd>T</kbd> — and Threadcalm presses Engage's own
+<kbd>t</kbd> — and Threadcalm presses Engage's own
 `Show translation` for you, once per post, when the post is on your screen — and only when it is
 confidently in a language that is not on your **Languages I read** list.
 
-- **Off means off, at once.** <kbd>Shift</kbd>+<kbd>T</kbd> again, or unticking the setting, stops
+- **Off means off, at once.** <kbd>t</kbd> again, or unticking the setting, stops
   it immediately, including posts already waiting their turn. Posts it has translated stay
   translated; `Show original` takes each one back.
 - **Pausing expansion switches it off too.** <kbd>e</kbd>, the panel's pause button or the
@@ -318,7 +337,7 @@ back to its original, one at a time. A toast counts them off ("Translating 3 of 
 
 - A post Engage does not translate within a few seconds is copied as written.
 - At most 40 posts are translated per copy; the rest are copied as written, and the toast says so.
-- <kbd>Shift</kbd>+<kbd>T</kbd> or pausing expansion stops it between posts, and what is there is copied.
+- <kbd>t</kbd> or pausing expansion stops it between posts, and what is there is copied.
 - The posts stay translated on the page afterwards.
 
 With automatic translation off, <kbd>c</kbd> copies what the page shows and translates nothing.
@@ -391,6 +410,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 |---|---|
 | Expand threads automatically | on |
 | Where to expand | Feed and single threads |
+| Overview: keep feeds compact | off |
 | Expand truncated post text | on |
 | Max clicks per pass | 40 |
 | Max clicks per page visit | 1500 |

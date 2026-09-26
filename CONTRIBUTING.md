@@ -102,6 +102,10 @@ every feature would apply twice.
 
    `beta` is a moving pointer at whatever is under test, not a line of history, so force-pushing
    it is the expected way to use it.
+
+   If a beta was built and installed somewhere without being pushed — on another machine, from a
+   local file — raise `betaBuild` above that build's number before the next push. Otherwise the
+   installed copy compares a lower number and is never offered the update.
 3. Install
    [`dist/threadcalm.beta.user.js`](https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js)
    from the beta branch, and disable the stable script while you test.

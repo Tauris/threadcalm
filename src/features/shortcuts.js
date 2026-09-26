@@ -34,13 +34,14 @@ export const BINDINGS = [
   { keys: ['j'], label: 'Next post' },
   { keys: ['k'], label: 'Previous post' },
   { keys: ['o'], label: 'Expand the focused post' },
+  { keys: ['v'], label: 'Overview: keep feeds compact, or open them again' },
   { keys: ['c'], label: 'Copy the focused thread' },
   { keys: ['y'], label: 'Copy a link to the focused thread' },
   { keys: ['e'], label: 'Pause or resume automatic expansion (pausing also stops automatic translation)' },
   { keys: ['a'], label: 'Hide the action bars outright, or show them again' },
   { keys: ['r'], label: 'Toggle reading mode' },
-  { keys: ['t'], label: 'Cycle the translation-control mode' },
-  { keys: ['T'], label: 'Switch automatic translation on or off' },
+  { keys: ['t'], label: 'Switch automatic translation on or off' },
+  { keys: ['T'], label: 'Cycle the translation-control mode' },
   { keys: ['s'], label: 'Open settings' },
   { keys: ['p'], label: 'Show or hide the status panel' },
   { keys: ['?'], label: 'Show this help' },
@@ -243,6 +244,16 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       case 'y':
         copyTools.copyLink(currentPost());
         break;
+      case 'v': {
+        const on = !settings.get('expand.overview');
+        settings.update({ 'expand.overview': on });
+        toast(
+          on
+            ? 'Overview on \u2014 feeds stay compact. o opens a post, v to leave.'
+            : 'Overview off \u2014 replies and long posts open again.',
+        );
+        break;
+      }
       case 'e': {
         const paused = expander.togglePause();
         toast(paused ? 'Expansion paused' : 'Expansion resumed');
@@ -260,10 +271,10 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
             : 'Reading mode off \u2014 your own settings are back.',
         );
         break;
-      case 't':
+      case 'T':
         cycleTranslateMode();
         break;
-      case 'T': {
+      case 't': {
         const on = !settings.get('translate.autoWhenVisible');
         // Written as a setting, so switching off reaches the translate feature
         // at once and stops anything still waiting its turn.

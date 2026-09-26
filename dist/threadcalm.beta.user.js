@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.1.1.15
+// @version     1.2.0.20
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.1.1.15
+ * Threadcalm (beta) v1.2.0.20
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -194,8 +194,9 @@
   var ACTION_ROW_SELECTOR = '[data-testid="overflow-set"]';
   var POST_SELECTOR = '[role="article"], article, .qaThreadStarter, .y-fixedGridColumn';
   var SEMANTIC_POST_SELECTOR = '[role="article"], article';
+  var STARTER_SELECTOR = ".qaThreadStarter";
   function looksLikePost(element) {
-    return element.querySelector(ACTION_ROW_SELECTOR) !== null;
+    return element.querySelector(ACTION_ROW_SELECTOR) !== null || element.matches(STARTER_SELECTOR);
   }
   function closestPost(element) {
     if (!(element instanceof HTMLElement)) return null;
@@ -225,7 +226,7 @@
     const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     const bodies = ownOf(post, BODY_WRAPPER_SELECTOR);
     const rows = ownOf(post, ACTION_ROW_SELECTOR);
-    return bodies.some((body) => follows(body, element)) && rows.some((row) => follows(element, row));
+    return bodies.some((body) => follows(body, element)) && (rows.length === 0 || rows.some((row) => follows(element, row)));
   }
   function postContainerFor(actionRow) {
     if (!(actionRow instanceof HTMLElement)) return null;
@@ -248,6 +249,17 @@
       if (!post || seen.has(post) || !isVisible(post)) continue;
       seen.add(post);
       posts.push(post);
+    }
+    let added = false;
+    for (const starter of root.querySelectorAll(STARTER_SELECTOR)) {
+      if (seen.has(starter) || starter.querySelector(ACTION_ROW_SELECTOR) || !isVisible(starter)) continue;
+      if (posts.some((post) => starter.contains(post) || post.contains(starter))) continue;
+      seen.add(starter);
+      posts.push(starter);
+      added = true;
+    }
+    if (added) {
+      posts.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     }
     return posts;
   }
@@ -762,11 +774,18 @@
       help: "Restricting to single threads keeps the main feed short."
     },
     {
+      key: "expand.overview",
+      type: "boolean",
+      default: false,
+      label: "Overview: keep feeds compact",
+      help: "For skimming. On a feed nothing opens by itself — neither replies nor long posts — so you see many posts at a glance; o opens the one you are on. A single conversation still opens as usual, and translation is unaffected. Press v to switch."
+    },
+    {
       key: "expand.truncatedText",
       type: "boolean",
       default: true,
       label: "Expand truncated post text",
-      help: 'Also click "See more" inside a post body.'
+      help: 'Also open "See more" inside a post body — each post once it has been on screen for a moment, so a long feed is not unfolded in the background. The o key and copying open every post they cover at once.'
     },
     {
       key: "expand.maxClicksPerScan",
@@ -851,7 +870,7 @@
       type: "boolean",
       default: false,
       label: "Automatic translation",
-      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off."
+      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off."
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -1526,7 +1545,6 @@
     if (!post.body && replies.length === 0) return null;
     return post;
   }
-  var STARTER_SELECTOR = ".qaThreadStarter";
   var INDENT_TOLERANCE = 2;
   function threadMembers(post) {
     if (!(post instanceof HTMLElement)) return null;
@@ -1920,7 +1938,8 @@
   var CANDIDATE_SELECTOR = 'button, [role="button"], a, [tabindex="0"], span, div[role="link"]';
   var MAX_LABEL_LENGTH2 = 120;
   var LEADING_DIGIT = new RegExp("^\\p{Nd}", "u");
-  function createExpander({ matchers }) {
+  var OPEN_DWELL_MS = 300;
+  function createExpander({ matchers, IntersectionObserverImpl = globalThis.IntersectionObserver }) {
     let active = matchers;
     let running = true;
     let paused = false;
@@ -1935,6 +1954,10 @@
     let scans = 0;
     let clicked = /* @__PURE__ */ new WeakSet();
     let expandedBodies = /* @__PURE__ */ new WeakSet();
+    let viewer = null;
+    const waiting = /* @__PURE__ */ new Map();
+    const onScreenSince = /* @__PURE__ */ new Map();
+    let openTimer = null;
     function publishState() {
       bus.emit(EVENTS.EXPAND_STATE, {
         enabled: get("expand.enabled"),
@@ -1943,9 +1966,11 @@
         limitReached
       });
     }
-    function inScope() {
+    function inScope({ explicit = false } = {}) {
       if (!get("expand.enabled") || paused) return false;
-      return get("expand.scope") !== "thread" || isThreadView();
+      if (isThreadView()) return true;
+      if (get("expand.overview") && !explicit) return false;
+      return get("expand.scope") !== "thread";
     }
     function isMenuLike(element, texts) {
       const popup = element.getAttribute("aria-haspopup");
@@ -1969,7 +1994,7 @@
         return isVisible(element) ? "reply-count" : null;
       }
       if (get("expand.truncatedText") && isBodyLinkButton(element)) {
-        if (expandedBodies.has(closestPost(element))) return null;
+        if (expandedBodies.has(element.closest(BODY_WRAPPER_SELECTOR))) return null;
         return isVisible(element) ? "truncation" : null;
       }
       if (texts.length === 0) return null;
@@ -1981,6 +2006,8 @@
       }
       if (get("expand.truncatedText") && active.expandText && texts.some((text) => active.expandText.test(text))) {
         if (!closestPost(element)) return null;
+        const body = element.closest(BODY_WRAPPER_SELECTOR);
+        if (body && expandedBodies.has(body)) return null;
         return isVisible(element) ? "truncation" : null;
       }
       return null;
@@ -2001,7 +2028,84 @@
       noteScan(examined);
       return found;
     }
-    function clickBatch(root = document) {
+    function viewTarget(control) {
+      return control.closest(BODY_WRAPPER_SELECTOR) ?? closestPost(control) ?? control;
+    }
+    function stopWaiting(target) {
+      viewer?.unobserve(target);
+      waiting.delete(target);
+      onScreenSince.delete(target);
+    }
+    function pruneWaiting() {
+      for (const target of [...waiting.keys()]) if (!target.isConnected) stopWaiting(target);
+    }
+    function clearWaiting() {
+      viewer?.disconnect();
+      viewer = null;
+      waiting.clear();
+      onScreenSince.clear();
+      clearTimeout(openTimer);
+      openTimer = null;
+    }
+    function openWhenSeen(control) {
+      const target = viewTarget(control);
+      if (!viewer) viewer = new IntersectionObserverImpl(onViewed, { threshold: 0 });
+      if (!waiting.has(target)) viewer.observe(target);
+      waiting.set(target, control);
+    }
+    function onViewed(entries) {
+      const now = Date.now();
+      for (const { target, isIntersecting, intersectionRatio } of entries) {
+        if (!waiting.has(target)) continue;
+        if (isIntersecting && intersectionRatio > 0) {
+          if (!onScreenSince.has(target)) onScreenSince.set(target, now);
+        } else {
+          onScreenSince.delete(target);
+        }
+      }
+      scheduleOpen();
+    }
+    function scheduleOpen() {
+      clearTimeout(openTimer);
+      openTimer = null;
+      if (!running || !inScope() || onScreenSince.size === 0) return;
+      const due = Math.min(...onScreenSince.values()) + OPEN_DWELL_MS;
+      openTimer = setTimeout(openSeen, Math.max(0, due - Date.now()));
+    }
+    function openSeen() {
+      openTimer = null;
+      if (!running || !inScope() || !get("expand.truncatedText")) return;
+      const maxTotal = get("expand.maxTotalClicks");
+      const now = Date.now();
+      let clicks = 0;
+      for (const [target, since] of [...onScreenSince]) {
+        if (since + OPEN_DWELL_MS > now) continue;
+        const control = waiting.get(target);
+        stopWaiting(target);
+        if (totalClicks >= maxTotal) break;
+        if (!control?.isConnected || clicked.has(control) || classify(control) !== "truncation") continue;
+        if (clickControl("truncation", control)) clicks += 1;
+      }
+      if (clicks > 0) bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
+      scheduleOpen();
+    }
+    function clickControl(kind, target) {
+      clicked.add(target);
+      if (kind === "truncation") {
+        const body = target.closest(BODY_WRAPPER_SELECTOR);
+        if (body) expandedBodies.add(body);
+      }
+      try {
+        target.click();
+      } catch (error) {
+        log.debug("click failed", error, target);
+        return false;
+      }
+      totalClicks += 1;
+      log.debug(`clicked ${kind}`, target);
+      return true;
+    }
+    function clickBatch(root = document, { deferTruncation = false } = {}) {
       const maxPerScan = get("expand.maxClicksPerScan");
       const maxTotal = get("expand.maxTotalClicks");
       if (totalClicks >= maxTotal) {
@@ -2012,32 +2116,25 @@
         }
         return 0;
       }
+      const defer = deferTruncation && typeof IntersectionObserverImpl === "function";
       let clicks = 0;
       for (const { kind, target } of findControls(root)) {
-        if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
-        clicked.add(target);
-        if (kind === "truncation") {
-          const post = closestPost(target);
-          if (post) expandedBodies.add(post);
-        }
-        try {
-          target.click();
-        } catch (error) {
-          log.debug("click failed", error, target);
+        if (defer && kind === "truncation") {
+          openWhenSeen(target);
           continue;
         }
-        clicks += 1;
-        totalClicks += 1;
-        log.debug(`clicked ${kind}`, target);
+        if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
+        if (clickControl(kind, target)) clicks += 1;
       }
       return clicks;
     }
-    function scan() {
+    function scan({ deferTruncation = true, explicit = false } = {}) {
       scanTimer = null;
-      if (!running || !inScope()) return;
+      if (!running || !inScope({ explicit })) return;
       dirty = false;
       scans += 1;
-      const clicks = clickBatch();
+      pruneWaiting();
+      const clicks = clickBatch(document, { deferTruncation });
       if (clicks > 0) {
         quietPasses = 0;
         bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
@@ -2052,7 +2149,7 @@
     }
     function schedule() {
       if (!running || scanTimer || !inScope()) return;
-      scanTimer = setTimeout(scan, get("expand.scanDelayMs"));
+      scanTimer = setTimeout(() => scan(), get("expand.scanDelayMs"));
     }
     const IDLE_BEAT_INTERVAL = 10;
     function beat() {
@@ -2082,6 +2179,7 @@
       idleBeats = 0;
       clicked = /* @__PURE__ */ new WeakSet();
       expandedBodies = /* @__PURE__ */ new WeakSet();
+      clearWaiting();
       publishState();
     }
     return {
@@ -2097,6 +2195,7 @@
         clearTimeout(settleTimer);
         clearInterval(heartbeat);
         scanTimer = settleTimer = heartbeat = null;
+        clearWaiting();
       },
       /** Called by the SPA watcher; a new route means new counters. */
       onNavigate() {
@@ -2114,6 +2213,7 @@
         dirty = true;
         publishState();
         schedule();
+        scheduleOpen();
       },
       /** Re-reads label packs after the user edits languages or patterns. */
       setMatchers(next) {
@@ -2122,21 +2222,24 @@
         schedule();
       },
       /** Forgets the click history and runs a fresh pass immediately. */
+      /** "Expand everything on this page": opens every post, seen or not. */
       rescan() {
         reset2();
-        scan();
+        scan({ deferTruncation: false, explicit: true });
       },
       pause() {
         paused = true;
         clearTimeout(scanTimer);
         clearTimeout(settleTimer);
-        scanTimer = settleTimer = null;
+        clearTimeout(openTimer);
+        scanTimer = settleTimer = openTimer = null;
         publishState();
       },
       resume() {
         paused = false;
         publishState();
         schedule();
+        scheduleOpen();
       },
       togglePause() {
         if (paused) this.resume();
@@ -2144,7 +2247,10 @@
         return paused;
       },
       isPaused: () => paused,
-      /** Expands one subtree only — used by the "expand this post" shortcut. */
+      /**
+       * Expands one subtree only, "see more" included whether on screen or not
+       * -- used by the o key and before copying.
+       */
       expandWithin(root) {
         return clickBatch(root);
       },
@@ -2495,13 +2601,14 @@
     { keys: ["j"], label: "Next post" },
     { keys: ["k"], label: "Previous post" },
     { keys: ["o"], label: "Expand the focused post" },
+    { keys: ["v"], label: "Overview: keep feeds compact, or open them again" },
     { keys: ["c"], label: "Copy the focused thread" },
     { keys: ["y"], label: "Copy a link to the focused thread" },
     { keys: ["e"], label: "Pause or resume automatic expansion (pausing also stops automatic translation)" },
     { keys: ["a"], label: "Hide the action bars outright, or show them again" },
     { keys: ["r"], label: "Toggle reading mode" },
-    { keys: ["t"], label: "Cycle the translation-control mode" },
-    { keys: ["T"], label: "Switch automatic translation on or off" },
+    { keys: ["t"], label: "Switch automatic translation on or off" },
+    { keys: ["T"], label: "Cycle the translation-control mode" },
     { keys: ["s"], label: "Open settings" },
     { keys: ["p"], label: "Show or hide the status panel" },
     { keys: ["?"], label: "Show this help" },
@@ -2666,6 +2773,14 @@
         case "y":
           copyTools.copyLink(currentPost());
           break;
+        case "v": {
+          const on = !get("expand.overview");
+          update({ "expand.overview": on });
+          toast(
+            on ? "Overview on — feeds stay compact. o opens a post, v to leave." : "Overview off — replies and long posts open again."
+          );
+          break;
+        }
         case "e": {
           const paused = expander.togglePause();
           toast(paused ? "Expansion paused" : "Expansion resumed");
@@ -2681,10 +2796,10 @@
             readingMode.toggle() ? "Reading mode on — quieter page. r to return to your own settings." : "Reading mode off — your own settings are back."
           );
           break;
-        case "t":
+        case "T":
           cycleTranslateMode();
           break;
-        case "T": {
+        case "t": {
           const on = !get("translate.autoWhenVisible");
           update({ "translate.autoWhenVisible": on });
           toast(on ? "Automatic translation on" : "Automatic translation off");
@@ -3079,6 +3194,7 @@
     const buildLabel = channel === "stable" ? `v${version} · ${stamp}` : `v${version} · ${channel} · ${stamp}`;
     let panel = null;
     let readingPill = null;
+    let overviewPill = null;
     let statusText = null;
     let pauseButton = null;
     let sheet = null;
@@ -3125,6 +3241,15 @@
             title: "Reading mode is on. Click, or press r, to return to your own settings.",
             hidden: !getOwn("reading.enabled"),
             on: { click: () => update({ "reading.enabled": false }) }
+          }),
+          // Says feeds are being kept compact, and is the way out of it.
+          overviewPill = el("button", {
+            type: "button",
+            className: "tc-mode-pill",
+            text: "Overview",
+            title: "Overview is on: feeds stay compact. Click, or press v, to let them open again.",
+            hidden: !getOwn("expand.overview"),
+            on: { click: () => update({ "expand.overview": false }) }
           }),
           el("span", {
             className: "tc-stamp",
@@ -3526,6 +3651,9 @@
           bus.on(EVENTS.EXPAND_STATE, onState),
           bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
             if ("general.showPanel" in changed) applyVisibility();
+            if ("expand.overview" in changed && overviewPill) {
+              overviewPill.hidden = !getOwn("expand.overview");
+            }
             if ("reading.enabled" in changed && readingPill) {
               readingPill.hidden = !getOwn("reading.enabled");
             }
@@ -4963,9 +5091,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.1.1.15" : "0.0.0-dev";
+  var VERSION = true ? "1.2.0.20" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "2a5257b" : "dev";
+  var BUILD = true ? "6c441f1" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
