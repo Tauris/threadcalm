@@ -18,6 +18,8 @@ const MAX_VISIBLE = 3;
 export function createToaster() {
   let container = null;
   let unsubscribe = null;
+  /** Toasts shown with a key, so a progress message updates in place. */
+  const keyed = new Map();
 
   function ensureContainer() {
     if (container?.isConnected) return container;
@@ -26,9 +28,24 @@ export function createToaster() {
     return container;
   }
 
-  function show({ message, tone = 'info', duration = VISIBLE_MS }) {
+  function dismiss(toast, key) {
+    toast.classList.remove('tc-in');
+    setTimeout(() => toast.remove(), 250);
+    if (key && keyed.get(key)?.toast === toast) keyed.delete(key);
+  }
+
+  function show({ message, tone = 'info', duration = VISIBLE_MS, key = null }) {
     if (!message) return;
     const host = ensureContainer();
+
+    const current = key ? keyed.get(key) : null;
+    if (current?.toast.isConnected) {
+      current.toast.textContent = message;
+      current.toast.classList.toggle('tc-warn', tone === 'warn');
+      clearTimeout(current.timer);
+      current.timer = setTimeout(() => dismiss(current.toast, key), duration);
+      return;
+    }
 
     while (host.children.length >= MAX_VISIBLE) host.firstElementChild?.remove();
 
@@ -41,10 +58,8 @@ export function createToaster() {
     // Two frames: one to attach, one so the transition has a start value.
     requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('tc-in')));
 
-    setTimeout(() => {
-      toast.classList.remove('tc-in');
-      setTimeout(() => toast.remove(), 250);
-    }, duration);
+    const timer = setTimeout(() => dismiss(toast, key), duration);
+    if (key) keyed.set(key, { toast, timer });
   }
 
   return {

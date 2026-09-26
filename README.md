@@ -28,7 +28,7 @@ that is reading. Threadcalm does the clicking.
 | **Quiet post chrome** | Optionally quiets the Like / Comment / Share bar and the inline comment and reply pills. Six modes for the bar, each trading space against movement against how much of the post is covered. Off by default. |
 | **Clutter removal** | Hides cards labelled sponsored, promoted or suggested. |
 | **Highlighting** | Marks posts with no replies, and posts you have not seen before. |
-| **Any interface language** | Reply counters are found by structure — a button carrying Engage's reply glyph — not by their wording, so thread expansion works whatever language your tenant renders. The controls that are still matched by text ship label packs for English, German, French, Spanish, Dutch and Italian, plus your own patterns. |
+| **Any interface language** | Reply counters are found by structure — a button carrying Engage's reply glyph — not by their wording, so thread expansion works whatever language your tenant renders. `See more` and the translation controls are recognised by structure too. Only reply pagination and sponsored cards are still matched by wording, with label packs for all 36 of Engage's languages, picked automatically. |
 
 Everything is individually switchable, and everything is off the network: the script makes no
 requests of its own. See [Privacy](#privacy).
@@ -57,10 +57,11 @@ live behind its **Settings** button, and the script also registers commands in t
 | <kbd>o</kbd> | Expand the focused post |
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
-| <kbd>e</kbd> | Pause or resume automatic expansion |
+| <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Reading mode on or off |
 | <kbd>t</kbd> | Cycle the translation-control mode |
+| <kbd>Shift</kbd>+<kbd>T</kbd> | Switch automatic translation on or off |
 | <kbd>s</kbd> | Open settings |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>?</kbd> | Show the shortcut list |
@@ -83,8 +84,13 @@ switchable with <kbd>t</kbd>:
 - **Always hide**.
 - **Leave unchanged**.
 
-`Show original` is only ever compacted, never hidden — hiding the way back out of a translation
-would strand you.
+`Show original` is never compacted or hidden: it is the way back out of a translation, and its
+label (`Show original (Japanese)`) says which language you are reading a translation of.
+
+**Automatic translation** (off by default) presses Engage's own `Show translation` once per post, for
+posts on your screen that are confidently in a language you do not read. <kbd>Shift</kbd>+<kbd>T</kbd>
+switches it on and off, and pausing expansion with <kbd>e</kbd> switches it off too. Unsure means no;
+see the [guide](docs/USAGE.md#automatic-translation).
 
 ### Copying a thread
 
@@ -107,6 +113,11 @@ We are moving the release to the end of the month.
 [Open in Viva Engage](https://engage.cloud.microsoft/...)
 ```
 
+Translated posts are marked as such in the copy (*Translated from Japanese by Engage.*), and with
+automatic translation on, <kbd>c</kbd> translates the thread's foreign posts first, including the ones
+off screen. The original can be included under each translation; see
+[the guide](docs/USAGE.md#translated-posts).
+
 Engage exposes no supported DOM contract, so extraction is best-effort: it reads authors, bodies,
 timestamps and reply nesting, and drops action-bar labels. Check anything you are about to paste
 somewhere that matters.
@@ -126,7 +137,7 @@ Every option is in the panel's settings sheet, grouped by feature, and stored lo
 | Settle delay | 800 ms | How long to let Engage re-render between passes. Raise it on a slow tenant. |
 | Like / Comment / Share bar | Always visible | Six modes, from *fade* to a corner cluster to keyboard-only. The settings sheet lists what each one gains and costs. |
 | Hide inline comment and reply boxes | off | Hides the pill that opens a composer. Reply still opens an editor, which is never hidden. |
-| Interface languages to recognise | English, German | Only affects the text-matched controls; reply counters are found without it. |
+| Additional interface languages | none | Your Engage language is read from the page and used automatically; this only adds more. |
 | Extra patterns | empty | Your own regular expressions, one per line, if your tenant words things differently. |
 
 ## Troubleshooting
@@ -145,8 +156,9 @@ manager's menu: *Show the Threadcalm panel*. <kbd>s</kbd> opens settings whether
 is visible or not.
 
 **Reply counters open, but "Show previous comments" or "See more" does not.** Those are still
-matched by their wording. Add your tenant's language under *Interface languages to recognise*, or
-add a pattern under *Advanced*.
+matched by their wording, and your Engage language may have no label pack yet — Threadcalm tells
+you once when that is the case. Add a pattern under *Advanced* meanwhile, and please report the
+language.
 
 **It clicked something it should not have.** Pause with <kbd>e</kbd>, then
 [open an issue](https://github.com/Tauris/threadcalm/issues) with the label text. Menu
@@ -191,9 +203,9 @@ to be fragile, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 - Language detection — the one that decides whether you can already read a post — is a stop-word
   heuristic. It is reliable on a paragraph, unreliable on "Thanks!", and deliberately declines to
   guess rather than hide a control it should not.
-- Reply counters aside, controls are still found by their wording. A tenant in a language with no
-  label pack gets expansion, but not "See more", the translation controls or clutter removal, until
-  a pack or a custom pattern covers it.
+- Reply pagination and sponsored cards are still found by their wording. Label packs cover all of
+  Engage's interface languages, but pagination has only been seen in a few of them; elsewhere reply
+  counters still open threads, and a custom pattern can fill the gap.
 - Tested against a limited set of tenants, locales and layouts. Reports welcome.
 
 ## Disclaimer

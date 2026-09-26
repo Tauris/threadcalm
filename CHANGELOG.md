@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-26
+
+### Added
+
+- **Automatic translation**, off by default. Switch it on in the settings or with
+  <kbd>Shift</kbd>+<kbd>T</kbd>, and Threadcalm presses Engage's own `Show translation` once per
+  post, for posts that have been on screen for half a second and are confidently in a language you
+  do not read. Posts you scroll past or never reach are left alone; several at once are translated
+  400 ms apart. Switching it off stops it at once, and so does pausing expansion with
+  <kbd>e</kbd>. `Show original` sticks: a post you turned back is not translated again.
+- **Translated posts are marked in copies** ("*Translated from Japanese by Engage.*"), whoever
+  translated them. With automatic translation on, <kbd>c</kbd> translates the thread's foreign
+  posts first, including the ones off screen, with a progress toast. **Include the original under
+  translated posts** (off by default) adds the author's own text below each translation.
+- **Writing-system detection** for Japanese, Chinese, Korean, Greek, Thai, Armenian and Georgian.
+  It takes precedence over stop words, so a Japanese post quoting English is still Japanese; text
+  in Chinese characters alone is treated as possibly either Chinese or Japanese.
+- **Label packs for all 36 languages Engage offers**, from labels observed on a live page in each.
+
+### Changed
+
+- **Your Engage language is picked up from the page.** The label pack now follows Engage's own
+  language setting; *Interface languages to recognise* becomes *Additional interface languages*,
+  empty by default. A page in a language without a pack is reported once, and in the layout
+  diagnostics.
+- **`See more` and the translation controls are recognised by structure**, in any interface
+  language, with wording as the fallback. `See more` is clicked at most once per post.
+- **`Show original` is no longer compacted.** Its label, `Show original (Japanese)`, is the only
+  sign that a post is translated and names the source language.
+- Links, buttons and timestamps no longer count towards a post's detected language.
+
+### Fixed
+
+- `Show original (Japanese)` and other labels with the source language in brackets were not
+  recognised.
+- A label pack without a pattern for some control could have produced a pattern matching every
+  label.
+
 ## [1.0.8] - 2026-09-24
 
 ### Fixed
@@ -288,6 +326,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.1.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.0
 [1.0.8]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.8
 [1.0.7]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.7
 [1.0.6]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.6

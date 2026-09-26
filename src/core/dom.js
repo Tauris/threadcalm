@@ -189,6 +189,69 @@ export function closestPost(element) {
 }
 
 /**
+ * The wrapper around a post's body text. Its class carries a generated
+ * suffix ("contentStateBodyTextWrapper-123"), hence the substring match.
+ */
+export const BODY_WRAPPER_SELECTOR = '[class*="contentStateBodyTextWrapper"]';
+
+/**
+ * Engage's inline text link: a real <button> whose only job is to look like a
+ * link, by wrapping a `span.y-fakeLink`. "see more", "Show translation" and
+ * "Show original (…)" are all built this way, in every interface language.
+ * A control that opens something (`aria-expanded`, `aria-haspopup`) is not
+ * one of them -- the collapsed "Write a comment" box is also a link-styled
+ * button, and carries `aria-expanded`.
+ */
+function isInlineLinkButton(element) {
+  return (
+    element instanceof HTMLButtonElement &&
+    element.querySelector(':scope > .y-fakeLink') !== null &&
+    !element.hasAttribute('aria-expanded') &&
+    !element.hasAttribute('aria-haspopup') &&
+    element.closest(ACTION_ROW_SELECTOR) === null
+  );
+}
+
+/** The post's own elements matching `selector`, not those of nested replies. */
+function ownOf(post, selector) {
+  return [...post.querySelectorAll(selector)].filter((element) => closestPost(element) === post);
+}
+
+/**
+ * A post's "see more", recognised without reading it: an inline link button
+ * inside the post's body wrapper.
+ *
+ * After it is clicked the same button reads "see less", which this cannot
+ * tell apart -- so callers must click it at most once per post.
+ */
+export function isBodyLinkButton(element) {
+  return (
+    isInlineLinkButton(element) &&
+    element.closest(BODY_WRAPPER_SELECTOR) !== null &&
+    closestPost(element) !== null
+  );
+}
+
+/**
+ * A post's "Show translation" or "Show original (…)", recognised without
+ * reading it: an inline link button below the post's body and above its
+ * action row, outside the body itself. Observed so in English, Japanese and
+ * Portuguese, on feed and conversation posts alike.
+ */
+export function isTranslationLinkButton(element) {
+  if (!isInlineLinkButton(element) || element.closest(BODY_WRAPPER_SELECTOR)) return false;
+  const post = closestPost(element);
+  if (!post) return false;
+  const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const bodies = ownOf(post, BODY_WRAPPER_SELECTOR);
+  const rows = ownOf(post, ACTION_ROW_SELECTOR);
+  return (
+    bodies.some((body) => follows(body, element)) &&
+    rows.some((row) => follows(element, row))
+  );
+}
+
+/**
  * The post that owns a given action row.
  *
  * Climbs to the nearest recognised container, and falls back to the row's

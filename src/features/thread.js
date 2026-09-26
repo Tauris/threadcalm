@@ -166,7 +166,7 @@ function extractPermalink(article) {
  * whole lines that are action labels or bare counters are dropped, which is
  * resilient to Engage reordering its action bar.
  */
-function extractBody(article) {
+export function extractBody(article) {
   const clone = article.cloneNode(true);
 
   const strip = [
@@ -223,7 +223,20 @@ function directReplies(article) {
  * @property {string} body
  * @property {{iso: string|null, display: string}} timestamp
  * @property {string|null} permalink
+ * @property {Translation|null} translation set when the body is Engage's translation
  * @property {ExtractedPost[]} replies
+ */
+
+/**
+ * @typedef {object} Translation
+ * @property {string|null} from    the source language as Engage names it, e.g. "Japanese"
+ * @property {string|null} original the text before translation, when it was captured
+ */
+
+/**
+ * @typedef {object} ExtractOptions
+ * @property {(article: HTMLElement) => Translation|null} [annotate]
+ *   says whether a post is showing a translation
  */
 
 /**
@@ -233,11 +246,11 @@ function directReplies(article) {
  * @param {number} [depth] recursion guard against pathological nesting
  * @returns {ExtractedPost|null}
  */
-export function extractPost(article, depth = 0) {
+export function extractPost(article, depth = 0, options = {}) {
   if (!(article instanceof HTMLElement) || depth > 6) return null;
 
   const replies = directReplies(article)
-    .map((reply) => extractPost(reply, depth + 1))
+    .map((reply) => extractPost(reply, depth + 1, options))
     .filter(Boolean);
 
   const post = {
@@ -245,6 +258,7 @@ export function extractPost(article, depth = 0) {
     body: extractBody(article),
     timestamp: extractTimestamp(article),
     permalink: extractPermalink(article),
+    translation: options.annotate?.(article) ?? null,
     replies,
   };
 
@@ -315,21 +329,22 @@ export function threadMembers(post) {
  * @param {HTMLElement[]} members the starter first, then the rest in order
  * @returns {ExtractedPost|null}
  */
-export function extractThread(members) {
+export function extractThread(members, options = {}) {
   if (!members?.length) return null;
 
   const [starter, ...rest] = members;
-  const root = extractPost(starter) ?? {
+  const root = extractPost(starter, 0, options) ?? {
     author: extractAuthor(starter),
     body: '',
     timestamp: extractTimestamp(starter),
     permalink: extractPermalink(starter),
+    translation: null,
     replies: [],
   };
 
   const stack = [{ node: root, left: starter.getBoundingClientRect().left }];
   for (const member of rest) {
-    const node = extractPost(member);
+    const node = extractPost(member, 0, options);
     if (!node) continue;
     const { left } = member.getBoundingClientRect();
 
@@ -379,10 +394,15 @@ export function renderThread(post, options = {}) {
     format = 'markdown',
     includeTimestamps = true,
     includePermalink = true,
+    includeOriginal = false,
     sourceUrl = location.href,
   } = options;
 
   const lines = [];
+
+  // A translation copied without saying so reads as the author's own words.
+  const translatedNote = ({ from }) =>
+    from ? `Translated from ${from} by Engage` : 'Translated by Engage';
 
   const stamp = (entry) => {
     if (!includeTimestamps) return '';
@@ -392,8 +412,22 @@ export function renderThread(post, options = {}) {
   };
 
   if (format === 'markdown') {
+    const translation = (entry, prefix) => {
+      if (!entry.translation) return;
+      lines.push(`${prefix}*${translatedNote(entry.translation)}.*`, prefix.trimEnd());
+      if (!includeOriginal) return;
+      if (!entry.translation.original) {
+        lines.push(`${prefix}*The original was not captured.*`, prefix.trimEnd());
+        return;
+      }
+      lines.push(`${prefix}*Original:*`, prefix.trimEnd());
+      for (const line of entry.translation.original.split('\n')) lines.push(`${prefix}${line}`);
+      lines.push(prefix.trimEnd());
+    };
+
     lines.push(`## ${post.author}${stamp(post)}`, '');
     if (post.body) lines.push(post.body, '');
+    translation(post, '');
 
     const walk = (entry, depth) => {
       const prefix = '> '.repeat(depth);
@@ -403,6 +437,7 @@ export function renderThread(post, options = {}) {
         lines.push(`${prefix}${line}`);
       }
       lines.push(prefix.trimEnd());
+      translation(entry, prefix);
       for (const child of entry.replies) walk(child, depth + 1);
     };
     for (const reply of post.replies) walk(reply, 1);
@@ -412,8 +447,24 @@ export function renderThread(post, options = {}) {
       lines.push('', `[Open in Viva Engage](${url})`);
     }
   } else {
+    const translation = (entry, indent) => {
+      if (!entry.translation) return;
+      lines.push(`${indent}[${translatedNote(entry.translation)}]`);
+      if (!includeOriginal) return;
+      if (!entry.translation.original) {
+        lines.push(`${indent}[The original was not captured]`);
+        return;
+      }
+      lines.push(`${indent}Original:`);
+      for (const line of entry.translation.original.split('\n')) lines.push(`${indent}${line}`);
+    };
+
     lines.push(`${post.author}${stamp(post)}`, '');
     if (post.body) lines.push(post.body, '');
+    if (post.translation) {
+      translation(post, '');
+      lines.push('');
+    }
 
     const walk = (entry, depth) => {
       const indent = '    '.repeat(depth);
@@ -421,6 +472,7 @@ export function renderThread(post, options = {}) {
       for (const line of entry.body.split('\n')) {
         lines.push(`${indent}  ${line}`);
       }
+      translation(entry, `${indent}  `);
       lines.push('');
       for (const child of entry.replies) walk(child, depth + 1);
     };

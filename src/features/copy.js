@@ -13,7 +13,7 @@
  * left alone, and the sweep re-attaches it if a render does remove it.
  */
 import { bus, EVENTS } from '../core/bus.js';
-import { debounce, el, rootPosts } from '../core/dom.js';
+import { allPosts, debounce, el, rootPosts } from '../core/dom.js';
 import { copyToClipboard } from '../core/gm.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
@@ -28,6 +28,9 @@ import {
 } from './thread.js';
 
 export const CHIP_CLASS = 'tc-chip';
+
+/** Progress of a copy's translations: one toast, updated in place. */
+const PROGRESS_KEY = 'copy-translate';
 export const HOST_CLASS = 'tc-post';
 
 /**
@@ -54,12 +57,12 @@ export const CORNER_CLASSES = {
   'bottom-right': 'tc-chip-bottom-right',
 };
 
-export function createCopyTools({ expander }) {
+export function createCopyTools({ expander, translate = null }) {
   /** Posts we have already decorated, so the sweep stays cheap. */
   const decorated = new WeakMap();
 
-  function toast(message, tone = 'info') {
-    bus.emit(EVENTS.TOAST, { message, tone });
+  function toast(message, tone = 'info', key = null) {
+    bus.emit(EVENTS.TOAST, { message, tone, key });
   }
 
   function renderOptions() {
@@ -67,7 +70,27 @@ export function createCopyTools({ expander }) {
       format: settings.get('copy.format'),
       includeTimestamps: settings.get('copy.includeTimestamps'),
       includePermalink: settings.get('copy.includePermalink'),
+      includeOriginal: settings.get('copy.includeOriginal'),
     };
+  }
+
+  /**
+   * With automatic translation on, a copy is the reader asking for the whole
+   * conversation, so its foreign posts are translated first -- including those
+   * off screen, which scrolling alone would never reach.
+   */
+  async function translateFirst(members, article) {
+    if (!translate) return false;
+    const posts = members ?? allPosts().filter((post) => article.contains(post));
+    const result = await translate.translateForCopy(posts, {
+      onProgress: (done, total) => toast(`Translating ${done} of ${total}…`, 'info', PROGRESS_KEY),
+    });
+    if (result.stopped) {
+      toast('Translation stopped; copying what is there', 'info', PROGRESS_KEY);
+    } else if (result.skipped > 0) {
+      toast(`Translated ${result.eligible - result.skipped}; ${result.skipped} more copied as written`, 'info', PROGRESS_KEY);
+    }
+    return result.eligible > 0;
   }
 
   /**
@@ -107,7 +130,13 @@ export function createCopyTools({ expander }) {
       }
     }
 
-    const post = members ? extractThread(members) : extractPost(article);
+    // Translation re-renders bodies, so the thread is read again afterwards.
+    if ((await translateFirst(members, article)) && members) {
+      members = threadMembers(members[0]) ?? members;
+    }
+
+    const options = { annotate: (element) => translate?.translationOf(element) ?? null };
+    const post = members ? extractThread(members, options) : extractPost(article, 0, options);
     if (!post) {
       toast('Could not read this post', 'warn');
       return false;

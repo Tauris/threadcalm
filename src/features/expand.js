@@ -30,6 +30,7 @@ import {
   accessibleTexts,
   closestPost,
   hasIconSignature,
+  isBodyLinkButton,
   isVisible,
   nearestClickable,
   normalizeText,
@@ -88,6 +89,9 @@ export function createExpander({ matchers }) {
   // freely but a given DOM node only ever needs to be opened once. A WeakSet
   // also lets detached nodes be collected after a re-render.
   let clicked = new WeakSet();
+  // Posts whose "see more" has been clicked. Recognised by structure alone,
+  // "see more" and "see less" are the same button, so a post is expanded once.
+  let expandedBodies = new WeakSet();
 
   function publishState() {
     bus.emit(EVENTS.EXPAND_STATE, {
@@ -142,6 +146,13 @@ export function createExpander({ matchers }) {
     // Layer 1: structure, which holds in every interface language.
     if (isStructuralReplyCount(element)) {
       return isVisible(element) ? 'reply-count' : null;
+    }
+
+    // "see more" by structure: an inline link button inside the post body.
+    // Holds in every interface language; wording below is the fallback.
+    if (settings.get('expand.truncatedText') && isBodyLinkButton(element)) {
+      if (expandedBodies.has(closestPost(element))) return null;
+      return isVisible(element) ? 'truncation' : null;
     }
 
     if (texts.length === 0) return null;
@@ -208,6 +219,10 @@ export function createExpander({ matchers }) {
     for (const { kind, target } of findControls(root)) {
       if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
       clicked.add(target);
+      if (kind === 'truncation') {
+        const post = closestPost(target);
+        if (post) expandedBodies.add(post);
+      }
       try {
         target.click();
       } catch (error) {
@@ -283,6 +298,7 @@ export function createExpander({ matchers }) {
     dirty = true;
     idleBeats = 0;
     clicked = new WeakSet();
+    expandedBodies = new WeakSet();
     publishState();
   }
 

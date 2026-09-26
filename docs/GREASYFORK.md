@@ -17,8 +17,9 @@ shortcuts the web app never had.
   settings is listed with what it gains and what it costs.
 - **Reading mode.** Press `r` for a quiet page in one step; press it again and your own
   settings are exactly as you left them.
-- **Works in any interface language** for thread expansion &mdash; reply counters are recognised by
-  their structure, not their wording.
+- **Works in any interface language.** Reply counters, "See more" and the translation controls are
+  recognised by their structure, not their wording; the rest has labels for all of Engage's
+  36 languages.
 
 Out of the box it expands threads, shrinks the translation prompt to a small icon, marks posts
 that are unanswered or new to you, and shows copy buttons when you point at a post. Everything
@@ -27,7 +28,7 @@ else waits until you switch it on.
 ## Keyboard
 
 `j` / `k` next and previous post &middot; `c` copy the thread &middot; `y` copy its link &middot; `o` expand &middot;
-`e` pause expansion &middot; `a` hide the action bars &middot; `r` reading mode &middot; `s` settings &middot; `?` all shortcuts
+`e` pause expansion &middot; `Shift+T` automatic translation &middot; `a` hide the action bars &middot; `r` reading mode &middot; `s` settings &middot; `?` all shortcuts
 
 ## Privacy
 

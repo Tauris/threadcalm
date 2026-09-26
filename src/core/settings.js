@@ -164,7 +164,7 @@ export const SCHEMA = [
     default: ['en', 'de'],
     label: 'Languages I read',
     options: detectableOptions,
-    help: 'Used by "Hide when I read the language". Detection is a stop-word guess and needs a sentence or two of text.',
+    help: 'Used by hiding and automatic translation. Latin-script languages use stop words; Japanese, Chinese, Korean, Greek, Thai, Armenian, and Georgian are recognised by their script, which wins over any English the post quotes. Han text can be ambiguous between Japanese and Chinese.',
   },
   {
     key: 'translate.minConfidence',
@@ -174,7 +174,14 @@ export const SCHEMA = [
     max: 1,
     step: 0.05,
     label: 'Minimum detection confidence',
-    help: 'Below this the control is only compacted, never hidden.',
+    help: 'Below this the control is only compacted, never hidden, and the post is never translated automatically.',
+  },
+  {
+    key: 'translate.autoWhenVisible',
+    type: 'boolean',
+    default: false,
+    label: 'Automatic translation',
+    help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off.',
   },
 
   // -- Post chrome ---------------------------------------------------------
@@ -305,6 +312,13 @@ export const SCHEMA = [
     label: 'Include timestamps',
   },
   {
+    key: 'copy.includeOriginal',
+    type: 'boolean',
+    default: false,
+    label: 'Include the original under translated posts',
+    help: 'Copied translations are always marked as such. With this on, the text as its author wrote it follows, so whoever reads the copy can check the translation. Doubles the length of those posts.',
+  },
+  {
     key: 'copy.showButtons',
     type: 'select',
     default: 'hover',
@@ -384,10 +398,10 @@ export const SCHEMA = [
   {
     key: 'general.languages',
     type: 'multiselect',
-    default: ['en', 'de'],
-    label: 'Interface languages to recognise',
+    default: [],
+    label: 'Additional interface languages',
     options: languageOptions,
-    help: 'Which label sets to match against. Add your tenant language here if controls are not found.',
+    help: 'Threadcalm reads your Engage language from the page and uses its labels automatically. Add a language here only if your page mixes several, or if controls are not found.',
   },
   {
     key: 'general.debug',

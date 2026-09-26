@@ -39,7 +39,9 @@ const WORD_SETS = Object.fromEntries(
   Object.entries(STOP_WORDS).map(([code, words]) => [code, new Set(words)]),
 );
 
-export const DETECTABLE_LANGUAGES = Object.keys(STOP_WORDS);
+const SCRIPT_LANGUAGES = ['ja', 'zh', 'ko', 'el', 'th', 'hy', 'ka'];
+
+export const DETECTABLE_LANGUAGES = [...Object.keys(STOP_WORDS), ...SCRIPT_LANGUAGES];
 
 /** Enough words to judge prose; more adds cost without adding certainty. */
 const MAX_WORDS = 120;
@@ -62,6 +64,64 @@ function tokenize(text) {
     .filter(Boolean);
 }
 
+function countMatches(text, pattern) {
+  return [...text.matchAll(pattern)].length;
+}
+
+/**
+ * How much of a distinctive script makes a post count as that language,
+ * however much else it contains. Absolute amounts, not shares: a Japanese post
+ * that quotes a paragraph of English is still a Japanese post -- to its
+ * author, and to a reader who does not read Japanese -- but a share of letters
+ * would call it English, because one kanji carries as much as a whole Latin
+ * word. The amounts are about a short sentence, so a single borrowed word in
+ * an English post does not flip it.
+ */
+const SCRIPT_MINIMUMS = {
+  // Kana in any Japanese sentence (particles, endings), plus enough in all.
+  jaKana: 3,
+  jaTotal: 6,
+  // Han without kana is Chinese or kanji-only Japanese; see detectScriptLanguage.
+  han: 8,
+};
+
+const SCRIPTS = [
+  ['ko', /\p{Script=Hangul}/gu, 6],
+  ['th', /\p{Script=Thai}/gu, 15],
+  ['el', /\p{Script=Greek}/gu, 20],
+  ['hy', /\p{Script=Armenian}/gu, 20],
+  ['ka', /\p{Script=Georgian}/gu, 20],
+];
+
+/**
+ * Languages with a distinctive writing system. Runs before the stop-word
+ * count and takes precedence over it: a post written in one of these is that
+ * language even when it quotes plenty of English.
+ */
+function detectScriptLanguage(text) {
+  const letters = countMatches(text, /\p{L}/gu);
+  if (letters === 0) return null;
+
+  const kana = countMatches(text, /\p{Script=Hiragana}|\p{Script=Katakana}/gu);
+  const han = countMatches(text, /\p{Script=Han}/gu);
+  if (kana >= SCRIPT_MINIMUMS.jaKana && kana + han >= SCRIPT_MINIMUMS.jaTotal) {
+    return { language: 'ja', confidence: 0.95, words: kana + han };
+  }
+
+  // Han is shared by Chinese and Japanese; keep that ambiguity, so readers of
+  // either are not auto-translated. Its confidence stays below the default
+  // threshold unless Han dominates, so a mixed post keeps its control.
+  if (han >= SCRIPT_MINIMUMS.han) {
+    return { language: 'zh', confidence: han / letters >= 0.5 ? 0.7 : 0.45, words: han, ambiguous: true };
+  }
+
+  for (const [language, pattern, minimum] of SCRIPTS) {
+    const count = countMatches(text, pattern);
+    if (count >= minimum) return { language, confidence: 0.95, words: count };
+  }
+  return null;
+}
+
 /**
  * Guesses the language of a block of text.
  *
@@ -71,6 +131,9 @@ function tokenize(text) {
  *   much of the text consisted of recognised function words. 0 when unknown.
  */
 export function detectLanguage(text) {
+  const scriptResult = detectScriptLanguage(String(text ?? ''));
+  if (scriptResult) return scriptResult;
+
   const words = tokenize(text).slice(0, MAX_WORDS);
   if (words.length < MIN_WORDS) {
     return { language: null, confidence: 0, words: words.length };

@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EVENTS, bus } from '../src/core/bus.js';
 import { buildMatchers } from '../src/core/i18n.js';
 import * as settings from '../src/core/settings.js';
 import {
   COMPACT_CLASS,
+  TRANSLATE_DWELL_MS,
+  TRANSLATE_SPACING_MS,
   HIDDEN_CLASS,
   ROW_CLASS,
   ROW_HIDDEN_CLASS,
@@ -64,13 +67,259 @@ describe('hide mode', () => {
     expect(button.classList.contains(HIDDEN_CLASS)).toBe(true);
   });
 
-  it('still never hides "Show original"', () => {
+  it('keeps the language-qualified original control visible and uncompact', () => {
     settings.update({ 'translate.mode': 'hide' });
-    const button = mount(ENGLISH_BODY, 'Show original');
+    const button = mount(ENGLISH_BODY, 'Show original (Japanese)');
     createTranslateTamer({ matchers }).sweep();
 
     expect(button.classList.contains(HIDDEN_CLASS)).toBe(false);
-    expect(button.classList.contains(COMPACT_CLASS)).toBe(true);
+    expect(button.classList.contains(COMPACT_CLASS)).toBe(false);
+    expect(button.textContent).toBe('Show original (Japanese)');
+  });
+});
+
+describe('automatic translation', () => {
+  const JAPANESE_BODY = '日本語の投稿です。明日の会議について確認します。';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A tamer with a hand-driven IntersectionObserver. */
+  function mountObserver() {
+    let notify;
+    const observer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    const IntersectionObserverImpl = vi.fn((callback) => {
+      notify = callback;
+      return observer;
+    });
+    const tamer = createTranslateTamer({ matchers, IntersectionObserverImpl });
+    const scroll = (post, onScreen) =>
+      notify([{ target: post, isIntersecting: onScreen, intersectionRatio: onScreen ? 0.5 : 0 }]);
+    return { tamer, observer, scroll };
+  }
+
+  /** Mounts a post and counts clicks on its translate control. */
+  function post(body, label) {
+    const control = mount(body, label);
+    const click = vi.fn();
+    control.addEventListener('click', click);
+    return { control, post: control.closest('[role="article"]'), click };
+  }
+
+  function enable(extra = {}) {
+    settings.update({ 'translate.autoWhenVisible': true, ...extra });
+  }
+
+  it('does nothing while switched off', () => {
+    post(JAPANESE_BODY);
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('watches the post, not the control at its bottom', () => {
+    enable();
+    const { post: article } = post(JAPANESE_BODY);
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).toHaveBeenCalledWith(article);
+  });
+
+  it('translates a post once it has stayed on screen', () => {
+    enable({ 'translate.mode': 'hide' });
+    const { control, post: article, click } = post(JAPANESE_BODY);
+    const { tamer, scroll } = mountObserver();
+    tamer.start();
+    // A post about to be translated keeps its control, whatever the mode.
+    expect(control.classList.contains(HIDDEN_CLASS)).toBe(false);
+
+    scroll(article, true);
+    expect(click).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a post alone that was only scrolled past', () => {
+    enable();
+    const { post: article, click } = post(JAPANESE_BODY);
+    const { tamer, scroll } = mountObserver();
+    tamer.start();
+
+    scroll(article, true);
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS / 2);
+    scroll(article, false);
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS * 4);
+
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('never translates a post that did not reach the screen', () => {
+    enable();
+    const { click } = post(JAPANESE_BODY);
+    const { tamer } = mountObserver();
+    tamer.start();
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS * 10);
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('translates even when the control is left unchanged', () => {
+    enable({ 'translate.mode': 'off' });
+    const { control, post: article, click } = post(JAPANESE_BODY);
+    const { tamer, scroll } = mountObserver();
+    tamer.start();
+
+    scroll(article, true);
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
+
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(control.classList.contains(COMPACT_CLASS)).toBe(false);
+  });
+
+  it('spaces translations out, and skips posts scrolled away while waiting', () => {
+    enable();
+    const posts = [post(FRENCH_BODY), post(FRENCH_BODY), post(FRENCH_BODY)];
+    const { tamer, scroll } = mountObserver();
+    tamer.start();
+    const clicks = () => posts.map(({ click }) => click.mock.calls.length);
+
+    for (const { post: article } of posts) scroll(article, true);
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
+    expect(clicks()).toEqual([1, 0, 0]);
+
+    scroll(posts[1].post, false);
+    vi.advanceTimersByTime(TRANSLATE_SPACING_MS);
+    expect(clicks()).toEqual([1, 0, 1]);
+  });
+
+  it('translates a post only once, so "Show original" sticks', () => {
+    enable();
+    const { control, post: article } = post(FRENCH_BODY);
+    const { tamer, observer, scroll } = mountObserver();
+    tamer.start();
+    scroll(article, true);
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
+
+    // Engage renders a fresh control after the reader goes back to the original.
+    control.replaceWith(control.cloneNode(true));
+    observer.observe.mockClear();
+    tamer.sweep();
+
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('leaves text too short to judge alone', () => {
+    enable();
+    post('Merci !');
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('leaves posts confidently in a language the reader reads', () => {
+    enable({ 'translate.knownLanguages': ['en'] });
+    post(ENGLISH_BODY);
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('leaves Japanese alone for a reader of Japanese', () => {
+    enable({ 'translate.knownLanguages': ['ja'] });
+    post(JAPANESE_BODY);
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('leaves Han-only text alone for a reader of Japanese', () => {
+    enable({ 'translate.knownLanguages': ['ja'] });
+    post('東京会議資料確認事項改善方法品質問題解決計画。');
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+    expect(observer.observe).not.toHaveBeenCalled();
+  });
+
+  it('releases posts Engage has removed before they were seen', () => {
+    enable();
+    const { post: article } = post(FRENCH_BODY);
+    const { tamer, observer } = mountObserver();
+    tamer.start();
+
+    article.remove();
+    tamer.sweep();
+
+    expect(observer.unobserve).toHaveBeenCalledWith(article);
+  });
+
+  it('stops at once when switched off, even for a post already waiting', () => {
+    enable();
+    const { post: article, click } = post(FRENCH_BODY);
+    const { tamer, observer, scroll } = mountObserver();
+    tamer.start();
+    scroll(article, true);
+
+    settings.update({ 'translate.autoWhenVisible': false });
+    tamer.onSettingsChanged({ 'translate.autoWhenVisible': false });
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS * 4);
+
+    expect(click).not.toHaveBeenCalled();
+    expect(observer.disconnect).toHaveBeenCalled();
+  });
+
+  it('switches off when expansion is paused, and stays off when it resumes', () => {
+    enable();
+    const { post: article, click } = post(FRENCH_BODY);
+    const { tamer, scroll } = mountObserver();
+    tamer.start();
+    // The settings bus reaches the feature the way main.js wires it.
+    const off = bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => tamer.onSettingsChanged(changed));
+    try {
+      scroll(article, true);
+      bus.emit(EVENTS.EXPAND_STATE, { enabled: true, paused: true });
+      vi.advanceTimersByTime(TRANSLATE_DWELL_MS * 4);
+
+      expect(settings.get('translate.autoWhenVisible')).toBe(false);
+      expect(click).not.toHaveBeenCalled();
+
+      bus.emit(EVENTS.EXPAND_STATE, { enabled: true, paused: false });
+      expect(settings.get('translate.autoWhenVisible')).toBe(false);
+    } finally {
+      off();
+      tamer.stop();
+    }
+  });
+
+  it('can be switched back on while expansion stays paused', () => {
+    const { tamer } = mountObserver();
+    tamer.start();
+    try {
+      bus.emit(EVENTS.EXPAND_STATE, { enabled: true, paused: true });
+      enable();
+      bus.emit(EVENTS.EXPAND_STATE, { enabled: true, paused: true });
+      expect(settings.get('translate.autoWhenVisible')).toBe(true);
+    } finally {
+      tamer.stop();
+    }
+  });
+
+  it('stops everything when stopped', () => {
+    enable();
+    const { post: article, click } = post(FRENCH_BODY);
+    const { tamer, observer, scroll } = mountObserver();
+    tamer.start();
+    scroll(article, true);
+
+    tamer.stop();
+    vi.advanceTimersByTime(TRANSLATE_DWELL_MS * 4);
+
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+    expect(click).not.toHaveBeenCalled();
   });
 });
 

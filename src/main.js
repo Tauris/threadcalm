@@ -14,8 +14,8 @@
  */
 import { bus, EVENTS } from './core/bus.js';
 import { rootPosts } from './core/dom.js';
-import { addStyle, copyToClipboard, registerMenuCommand } from './core/gm.js';
-import { buildMatchers } from './core/i18n.js';
+import { addStyle, copyToClipboard, getValue, registerMenuCommand, setValue } from './core/gm.js';
+import { buildMatchers, pageLanguage, resolveLanguages } from './core/i18n.js';
 import { log } from './core/logger.js';
 import * as settings from './core/settings.js';
 import { startSpaWatcher } from './core/spa.js';
@@ -55,10 +55,41 @@ const MATCHER_KEYS = [
   'advanced.extraPromoted',
 ];
 
+/** The label sets in use: the page's language, plus the reader's additions. */
+function interfaceLanguages() {
+  return resolveLanguages(pageLanguage(), settings.get('general.languages'));
+}
+
+function languageName(code) {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/**
+ * Says once, per language, when Engage is in a language with no label set.
+ * Without this the label-bound features simply find nothing, and nothing on
+ * screen explains why.
+ */
+function noticeUnsupportedLanguage() {
+  const { page, supported } = interfaceLanguages();
+  if (supported) return;
+  const message =
+    `Engage is in ${languageName(page)}, which Threadcalm has no labels for yet: `
+    + 'threads, "See more" and translation work, but "Show previous comments" and sponsored cards are not recognised.';
+  log.warn(message);
+  const key = `language-notice-${page}`;
+  if (getValue(key, false)) return;
+  setValue(key, true);
+  bus.emit(EVENTS.TOAST, { message, tone: 'warn', duration: 9000 });
+}
+
 function main() {
   settings.load();
 
-  let matchers = buildMatchers(settings.get('general.languages'), settings.customPatterns());
+  let matchers = buildMatchers(interfaceLanguages().codes, settings.customPatterns());
 
   addStyle(ALL_STYLES);
 
@@ -68,7 +99,7 @@ function main() {
   const highlighter = createHighlighter({ matchers });
   const quietChrome = createQuietChrome();
   const readingMode = createReadingMode();
-  const copyTools = createCopyTools({ expander });
+  const copyTools = createCopyTools({ expander, translate });
   const toaster = createToaster();
 
   const panel = createPanel({
@@ -114,13 +145,15 @@ function main() {
 
   bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
     if (MATCHER_KEYS.some((key) => key in changed)) {
-      matchers = buildMatchers(settings.get('general.languages'), settings.customPatterns());
+      matchers = buildMatchers(interfaceLanguages().codes, settings.customPatterns());
       for (const feature of features) feature.setMatchers?.(matchers);
     }
     dispatch('onSettingsChanged', changed);
   });
 
   for (const feature of features) feature.start?.();
+  // After the toaster has started, so the notice can be shown.
+  noticeUnsupportedLanguage();
 
   startSpaWatcher();
   registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode });
@@ -245,6 +278,12 @@ async function copyDiagnostics() {
     lines.push(`  ${String(count).padStart(4)}  ${label}  (${selector})`);
   }
 
+  const { page, codes, supported } = interfaceLanguages();
+  lines.push(
+    '',
+    `interface language: ${page ?? '(not declared)'}${supported ? '' : ' (no label set)'}`,
+    `label sets in use: ${codes.length ? codes.join(', ') : 'en (fallback)'}`,
+  );
   lines.push('', `posts resolved: ${rootPosts().length}`);
   lines.push(...activityLines(), '');
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm
 // @namespace   https://github.com/Tauris/threadcalm
-// @version     1.0.8
+// @version     1.1.0
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm v1.0.8
+ * Threadcalm v1.1.0
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -208,6 +208,25 @@
     }
     return null;
   }
+  var BODY_WRAPPER_SELECTOR = '[class*="contentStateBodyTextWrapper"]';
+  function isInlineLinkButton(element) {
+    return element instanceof HTMLButtonElement && element.querySelector(":scope > .y-fakeLink") !== null && !element.hasAttribute("aria-expanded") && !element.hasAttribute("aria-haspopup") && element.closest(ACTION_ROW_SELECTOR) === null;
+  }
+  function ownOf(post, selector) {
+    return [...post.querySelectorAll(selector)].filter((element) => closestPost(element) === post);
+  }
+  function isBodyLinkButton(element) {
+    return isInlineLinkButton(element) && element.closest(BODY_WRAPPER_SELECTOR) !== null && closestPost(element) !== null;
+  }
+  function isTranslationLinkButton(element) {
+    if (!isInlineLinkButton(element) || element.closest(BODY_WRAPPER_SELECTOR)) return false;
+    const post = closestPost(element);
+    if (!post) return false;
+    const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const bodies = ownOf(post, BODY_WRAPPER_SELECTOR);
+    const rows = ownOf(post, ACTION_ROW_SELECTOR);
+    return bodies.some((body) => follows(body, element)) && rows.some((row) => follows(element, row));
+  }
   function postContainerFor(actionRow) {
     if (!(actionRow instanceof HTMLElement)) return null;
     let node2 = actionRow.parentElement;
@@ -370,6 +389,7 @@
   }
 
   // src/core/i18n.js
+  var ORIGINAL_SUFFIX = "(?:\\s*\\([^)]*\\))?$";
   var LABEL_PACKS = {
     en: {
       name: "English",
@@ -385,7 +405,7 @@
         "^translate\\s+post$",
         "^see\\s+translation$"
       ],
-      showOriginal: ["^(?:show|see)\\s+original(?:\\s+post)?$", "^undo\\s+translation$"],
+      showOriginal: ["^(?:show|see)\\s+original(?:\\s+post)?(?:\\s*\\([^)]*\\))?$", "^undo\\s+translation$"],
       promoted: [
         "^promoted$",
         "^sponsored$",
@@ -409,7 +429,7 @@
         "^übersetzen$",
         "^Beitrag\\s+übersetzen$"
       ],
-      showOriginal: ["^Original\\s+anzeigen$", "^Übersetzung\\s+rückgängig"],
+      showOriginal: ["^Original\\s+anzeigen(?:\\s*\\([^)]*\\))?$", "^Übersetzung\\s+rückgängig"],
       promoted: ["^gesponsert$", "^beworben$", "^vorgeschlagen$", "^vorschläge\\s+für\\s+dich$"],
       menu: ["weitere optionen", "mehr optionen", "weitere aktionen", "menü", "einstellungen"]
     },
@@ -424,7 +444,7 @@
       ],
       expandText: ["^voir\\s+plus$", "^afficher\\s+plus$", "^lire\\s+la\\s+suite$"],
       translate: ["^(?:afficher\\s+la\\s+)?traduction$", "^traduire(?:\\s+la\\s+publication)?$"],
-      showOriginal: ["^(?:afficher|voir)\\s+l[’']original$"],
+      showOriginal: ["^(?:afficher|voir)\\s+l[’']original(?:\\s*\\([^)]*\\))?$"],
       promoted: ["^sponsorisé$", "^promu$", "^suggéré$"],
       menu: ["plus d’options", "plus d'options", "autres actions", "menu", "paramètres"]
     },
@@ -437,7 +457,7 @@
       ],
       expandText: ["^ver\\s+más$", "^mostrar\\s+más$", "^leer\\s+más$"],
       translate: ["^(?:mostrar\\s+)?traducción$", "^traducir(?:\\s+publicación)?$"],
-      showOriginal: ["^(?:mostrar|ver)\\s+original$"],
+      showOriginal: ["^(?:mostrar|ver)\\s+original(?:\\s*\\([^)]*\\))?$"],
       promoted: ["^patrocinado$", "^promocionado$", "^sugerido$"],
       menu: ["más opciones", "más acciones", "menú", "configuración"]
     },
@@ -450,7 +470,7 @@
       ],
       expandText: ["^meer\\s+weergeven$", "^meer\\s+tonen$", "^lees\\s+meer$"],
       translate: ["^vertaling\\s+weergeven$", "^vertalen$"],
-      showOriginal: ["^origineel\\s+weergeven$"],
+      showOriginal: ["^origineel\\s+weergeven(?:\\s*\\([^)]*\\))?$"],
       promoted: ["^gesponsord$", "^voorgesteld$"],
       menu: ["meer opties", "meer acties", "menu", "instellingen"]
     },
@@ -463,17 +483,85 @@
       ],
       expandText: ["^mostra\\s+(?:di\\s+)?più$", "^leggi\\s+tutto$"],
       translate: ["^(?:mostra\\s+)?traduzione$", "^traduci(?:\\s+post)?$"],
-      showOriginal: ["^mostra\\s+originale$"],
+      showOriginal: ["^mostra\\s+originale(?:\\s*\\([^)]*\\))?$"],
       promoted: ["^sponsorizzato$", "^suggerito$"],
       menu: ["altre opzioni", "altre azioni", "menù", "impostazioni"]
     }
   };
+  var OBSERVED = {
+    ar: {
+      name: "العربية",
+      seeMore: ["إظهار المزيد"],
+      translate: ["إظهار الترجمة"],
+      original: ["إظهار النسخة الأصلية"],
+      // "Show 1 previous comment", with Arabic-Indic digits.
+      pagination: ["^إظهار\\s+[0-9٠-٩]+\\s+تعليق(?:ات)?\\s+ساب"]
+    },
+    bg: { name: "Български", seeMore: ["вижте повече"], translate: ["Показване на превод"], original: ["Показване на оригинала"] },
+    ca: { name: "Català", seeMore: ["mostra més"], translate: ["Mostra la traducció"] },
+    cs: { name: "Čeština", seeMore: ["zobrazit více"], translate: ["Zobrazit překlad"] },
+    da: { name: "Dansk", seeMore: ["se mere"], translate: ["Vis oversættelse"] },
+    de: { seeMore: ["Mehr anzeigen"], translate: ["Übersetzung anzeigen"] },
+    el: { name: "Ελληνικά", seeMore: ["εμφάνιση περισσότερων"], translate: ["Εμφάνιση μετάφρασης"] },
+    en: { seeMore: ["see more"], translate: ["Show translation"], original: ["Show original"] },
+    es: { seeMore: ["ver más"], translate: ["Mostrar traducción"] },
+    et: { name: "Eesti", seeMore: ["kuva rohkem"], translate: ["Kuva tõlge"] },
+    fi: { name: "Suomi", seeMore: ["näytä enemmän"], translate: ["Näytä käännös"] },
+    fr: { seeMore: ["afficher plus"], translate: ["Afficher la traduction"] },
+    he: { name: "עברית", seeMore: ["הצג עוד"], translate: ["הצג תרגום"] },
+    hr: { name: "Hrvatski", seeMore: ["prikaži više"], translate: ["Prikaži prijevod"] },
+    hu: { name: "Magyar", seeMore: ["Kibontás"], translate: ["Fordítás megjelenítése"] },
+    id: { name: "Bahasa Indonesia", seeMore: ["lihat selengkapnya"], translate: ["Perlihatkan terjemahan"] },
+    it: { seeMore: ["vedi altro"], translate: ["Mostra traduzione"] },
+    ja: { name: "日本語", seeMore: ["詳細を表示"], translate: ["翻訳を表示"], original: ["原文を表示"] },
+    ko: { name: "한국어", seeMore: ["더 보기"], translate: ["번역 표시"] },
+    lt: { name: "Lietuvių", seeMore: ["žr. daugiau"], translate: ["Rodyti vertimą"] },
+    lv: { name: "Latviešu", seeMore: ["skatīt vairāk"], translate: ["Rādīt tulkojumu"] },
+    nb: { name: "Norsk bokmål", seeMore: ["se mer"], translate: ["Vis oversettelse"] },
+    nl: { seeMore: ["meer weergeven"], translate: ["Vertaling weergeven"] },
+    pl: { name: "Polski", seeMore: ["zobacz więcej"], translate: ["Pokaż tłumaczenie"] },
+    pt: { name: "Português", seeMore: ["ver mais"], translate: ["Mostrar tradução", "Exibir tradução"], original: ["Exibir original"] },
+    ro: { name: "Română", seeMore: ["vedeți mai multe"], translate: ["Afișează traducerea"] },
+    ru: { name: "Русский", seeMore: ["Показать больше"], translate: ["Показать перевод"], original: ["Показать оригинал"] },
+    sk: { name: "Slovenčina", seeMore: ["zobraziť viac"], translate: ["Zobraziť preklad"] },
+    sl: { name: "Slovenščina", seeMore: ["pokaži več"], translate: ["Pokaži prevod"] },
+    sr: { name: "Srpski", seeMore: ["pogledajte više"], translate: ["Prikaži prevod"] },
+    sv: { name: "Svenska", seeMore: ["visa mer"], translate: ["Visa översättning"] },
+    th: { name: "ไทย", seeMore: ["ดูเพิ่มเติม"], translate: ["แสดงคำแปล"] },
+    tr: { name: "Türkçe", seeMore: ["daha fazla göster"], translate: ["Çeviriyi göster"] },
+    uk: { name: "Українська", seeMore: ["показати більше"], translate: ["Показати переклад"] },
+    vi: { name: "Tiếng Việt", seeMore: ["xem thêm"], translate: ["Hiển thị bản dịch"] },
+    zh: { name: "中文", seeMore: ["查看更多"], translate: ["显示翻译", "顯示翻譯"] }
+  };
+  function phrase(text) {
+    return `^${text.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}$`;
+  }
+  function originalPhrase(text) {
+    return phrase(text).replace(/\$$/, () => ORIGINAL_SUFFIX);
+  }
+  for (const [code, observed] of Object.entries(OBSERVED)) {
+    const pack = LABEL_PACKS[code] ??= {
+      name: observed.name,
+      replyCount: null,
+      expandReplies: [],
+      expandText: [],
+      translate: [],
+      showOriginal: [],
+      promoted: [],
+      menu: []
+    };
+    pack.expandText.push(...(observed.seeMore ?? []).map(phrase));
+    pack.translate.push(...(observed.translate ?? []).map(phrase));
+    pack.showOriginal.push(...(observed.original ?? []).map(originalPhrase));
+    pack.expandReplies.push(...observed.pagination ?? []);
+  }
   var AVAILABLE_LANGUAGES = Object.keys(LABEL_PACKS);
   var LANGUAGE_NAMES = Object.fromEntries(
     Object.entries(LABEL_PACKS).map(([code, pack]) => [code, pack.name])
   );
   function compile(patterns) {
     const usable = patterns.filter((pattern) => {
+      if (typeof pattern !== "string" || pattern === "") return false;
       try {
         new RegExp(pattern);
         return true;
@@ -483,6 +571,18 @@
     });
     if (usable.length === 0) return null;
     return new RegExp(usable.map((pattern) => `(?:${pattern})`).join("|"), "i");
+  }
+  function pageLanguage(doc = globalThis.document) {
+    const raw = doc?.documentElement?.lang?.trim().toLowerCase() ?? "";
+    return raw ? raw.split(/[-_]/)[0] : null;
+  }
+  function resolveLanguages(page, extra = []) {
+    const codes = [];
+    if (page && page in LABEL_PACKS) codes.push(page);
+    for (const code of extra ?? []) {
+      if (code in LABEL_PACKS && !codes.includes(code)) codes.push(code);
+    }
+    return { codes, page, supported: !page || page in LABEL_PACKS };
   }
   function buildMatchers(languages, custom = {}) {
     const active = (languages ?? []).filter((code) => code in LABEL_PACKS);
@@ -541,13 +641,50 @@
   var WORD_SETS = Object.fromEntries(
     Object.entries(STOP_WORDS).map(([code, words]) => [code, new Set(words)])
   );
-  var DETECTABLE_LANGUAGES = Object.keys(STOP_WORDS);
+  var SCRIPT_LANGUAGES = ["ja", "zh", "ko", "el", "th", "hy", "ka"];
+  var DETECTABLE_LANGUAGES = [...Object.keys(STOP_WORDS), ...SCRIPT_LANGUAGES];
   var MAX_WORDS = 120;
   var MIN_WORDS = 8;
   function tokenize(text) {
     return String(text ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/https?:\/\/\S+/g, " ").replace(/[^a-zß\s]/g, " ").split(/\s+/).filter(Boolean);
   }
+  function countMatches(text, pattern) {
+    return [...text.matchAll(pattern)].length;
+  }
+  var SCRIPT_MINIMUMS = {
+    // Kana in any Japanese sentence (particles, endings), plus enough in all.
+    jaKana: 3,
+    jaTotal: 6,
+    // Han without kana is Chinese or kanji-only Japanese; see detectScriptLanguage.
+    han: 8
+  };
+  var SCRIPTS = [
+    ["ko", new RegExp("\\p{Script=Hangul}", "gu"), 6],
+    ["th", new RegExp("\\p{Script=Thai}", "gu"), 15],
+    ["el", new RegExp("\\p{Script=Greek}", "gu"), 20],
+    ["hy", new RegExp("\\p{Script=Armenian}", "gu"), 20],
+    ["ka", new RegExp("\\p{Script=Georgian}", "gu"), 20]
+  ];
+  function detectScriptLanguage(text) {
+    const letters = countMatches(text, new RegExp("\\p{L}", "gu"));
+    if (letters === 0) return null;
+    const kana = countMatches(text, new RegExp("\\p{Script=Hiragana}|\\p{Script=Katakana}", "gu"));
+    const han = countMatches(text, new RegExp("\\p{Script=Han}", "gu"));
+    if (kana >= SCRIPT_MINIMUMS.jaKana && kana + han >= SCRIPT_MINIMUMS.jaTotal) {
+      return { language: "ja", confidence: 0.95, words: kana + han };
+    }
+    if (han >= SCRIPT_MINIMUMS.han) {
+      return { language: "zh", confidence: han / letters >= 0.5 ? 0.7 : 0.45, words: han, ambiguous: true };
+    }
+    for (const [language, pattern, minimum] of SCRIPTS) {
+      const count = countMatches(text, pattern);
+      if (count >= minimum) return { language, confidence: 0.95, words: count };
+    }
+    return null;
+  }
   function detectLanguage(text) {
+    const scriptResult = detectScriptLanguage(String(text ?? ""));
+    if (scriptResult) return scriptResult;
     const words = tokenize(text).slice(0, MAX_WORDS);
     if (words.length < MIN_WORDS) {
       return { language: null, confidence: 0, words: words.length };
@@ -697,7 +834,7 @@
       default: ["en", "de"],
       label: "Languages I read",
       options: detectableOptions,
-      help: 'Used by "Hide when I read the language". Detection is a stop-word guess and needs a sentence or two of text.'
+      help: "Used by hiding and automatic translation. Latin-script languages use stop words; Japanese, Chinese, Korean, Greek, Thai, Armenian, and Georgian are recognised by their script, which wins over any English the post quotes. Han text can be ambiguous between Japanese and Chinese."
     },
     {
       key: "translate.minConfidence",
@@ -707,7 +844,14 @@
       max: 1,
       step: 0.05,
       label: "Minimum detection confidence",
-      help: "Below this the control is only compacted, never hidden."
+      help: "Below this the control is only compacted, never hidden, and the post is never translated automatically."
+    },
+    {
+      key: "translate.autoWhenVisible",
+      type: "boolean",
+      default: false,
+      label: "Automatic translation",
+      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off."
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -827,6 +971,13 @@
       label: "Include timestamps"
     },
     {
+      key: "copy.includeOriginal",
+      type: "boolean",
+      default: false,
+      label: "Include the original under translated posts",
+      help: "Copied translations are always marked as such. With this on, the text as its author wrote it follows, so whoever reads the copy can check the translation. Doubles the length of those posts."
+    },
+    {
       key: "copy.showButtons",
       type: "select",
       default: "hover",
@@ -904,10 +1055,10 @@
     {
       key: "general.languages",
       type: "multiselect",
-      default: ["en", "de"],
-      label: "Interface languages to recognise",
+      default: [],
+      label: "Additional interface languages",
       options: languageOptions,
-      help: "Which label sets to match against. Add your tenant language here if controls are not found."
+      help: "Threadcalm reads your Engage language from the page and uses its labels automatically. Add a language here only if your page mixes several, or if controls are not found."
     },
     {
       key: "general.debug",
@@ -1361,14 +1512,15 @@
       (candidate) => !nested.some((other) => other !== candidate && other.contains(candidate))
     );
   }
-  function extractPost(article, depth = 0) {
+  function extractPost(article, depth = 0, options = {}) {
     if (!(article instanceof HTMLElement) || depth > 6) return null;
-    const replies = directReplies(article).map((reply) => extractPost(reply, depth + 1)).filter(Boolean);
+    const replies = directReplies(article).map((reply) => extractPost(reply, depth + 1, options)).filter(Boolean);
     const post = {
       author: extractAuthor(article),
       body: extractBody(article),
       timestamp: extractTimestamp(article),
       permalink: extractPermalink(article),
+      translation: options.annotate?.(article) ?? null,
       replies
     };
     if (!post.body && replies.length === 0) return null;
@@ -1396,19 +1548,20 @@
     }
     return members;
   }
-  function extractThread(members) {
+  function extractThread(members, options = {}) {
     if (!members?.length) return null;
     const [starter, ...rest] = members;
-    const root = extractPost(starter) ?? {
+    const root = extractPost(starter, 0, options) ?? {
       author: extractAuthor(starter),
       body: "",
       timestamp: extractTimestamp(starter),
       permalink: extractPermalink(starter),
+      translation: null,
       replies: []
     };
     const stack = [{ node: root, left: starter.getBoundingClientRect().left }];
     for (const member of rest) {
-      const node2 = extractPost(member);
+      const node2 = extractPost(member, 0, options);
       if (!node2) continue;
       const { left } = member.getBoundingClientRect();
       while (stack.length > 1 && stack[stack.length - 1].left >= left - INDENT_TOLERANCE) {
@@ -1435,9 +1588,11 @@
       format = "markdown",
       includeTimestamps = true,
       includePermalink = true,
+      includeOriginal = false,
       sourceUrl = location.href
     } = options;
     const lines = [];
+    const translatedNote = ({ from }) => from ? `Translated from ${from} by Engage` : "Translated by Engage";
     const stamp = (entry) => {
       if (!includeTimestamps) return "";
       const { iso, display } = entry.timestamp;
@@ -1445,8 +1600,21 @@
       return shown ? ` — ${shown}` : "";
     };
     if (format === "markdown") {
+      const translation = (entry, prefix) => {
+        if (!entry.translation) return;
+        lines.push(`${prefix}*${translatedNote(entry.translation)}.*`, prefix.trimEnd());
+        if (!includeOriginal) return;
+        if (!entry.translation.original) {
+          lines.push(`${prefix}*The original was not captured.*`, prefix.trimEnd());
+          return;
+        }
+        lines.push(`${prefix}*Original:*`, prefix.trimEnd());
+        for (const line of entry.translation.original.split("\n")) lines.push(`${prefix}${line}`);
+        lines.push(prefix.trimEnd());
+      };
       lines.push(`## ${post.author}${stamp(post)}`, "");
       if (post.body) lines.push(post.body, "");
+      translation(post, "");
       const walk = (entry, depth) => {
         const prefix = "> ".repeat(depth);
         lines.push(`${prefix}**${entry.author}**${stamp(entry)}`);
@@ -1455,6 +1623,7 @@
           lines.push(`${prefix}${line}`);
         }
         lines.push(prefix.trimEnd());
+        translation(entry, prefix);
         for (const child of entry.replies) walk(child, depth + 1);
       };
       for (const reply of post.replies) walk(reply, 1);
@@ -1463,14 +1632,30 @@
         lines.push("", `[Open in Viva Engage](${url})`);
       }
     } else {
+      const translation = (entry, indent) => {
+        if (!entry.translation) return;
+        lines.push(`${indent}[${translatedNote(entry.translation)}]`);
+        if (!includeOriginal) return;
+        if (!entry.translation.original) {
+          lines.push(`${indent}[The original was not captured]`);
+          return;
+        }
+        lines.push(`${indent}Original:`);
+        for (const line of entry.translation.original.split("\n")) lines.push(`${indent}${line}`);
+      };
       lines.push(`${post.author}${stamp(post)}`, "");
       if (post.body) lines.push(post.body, "");
+      if (post.translation) {
+        translation(post, "");
+        lines.push("");
+      }
       const walk = (entry, depth) => {
         const indent = "    ".repeat(depth);
         lines.push(`${indent}${entry.author}${stamp(entry)}`);
         for (const line of entry.body.split("\n")) {
           lines.push(`${indent}  ${line}`);
         }
+        translation(entry, `${indent}  `);
         lines.push("");
         for (const child of entry.replies) walk(child, depth + 1);
       };
@@ -1504,6 +1689,7 @@
 
   // src/features/copy.js
   var CHIP_CLASS = "tc-chip";
+  var PROGRESS_KEY = "copy-translate";
   var HOST_CLASS = "tc-post";
   var REVEAL_CLASSES = {
     hover: "tc-chip-hover",
@@ -1515,17 +1701,31 @@
     "bottom-left": "tc-chip-bottom-left",
     "bottom-right": "tc-chip-bottom-right"
   };
-  function createCopyTools({ expander }) {
+  function createCopyTools({ expander, translate = null }) {
     const decorated = /* @__PURE__ */ new WeakMap();
-    function toast(message, tone = "info") {
-      bus.emit(EVENTS.TOAST, { message, tone });
+    function toast(message, tone = "info", key = null) {
+      bus.emit(EVENTS.TOAST, { message, tone, key });
     }
     function renderOptions() {
       return {
         format: get("copy.format"),
         includeTimestamps: get("copy.includeTimestamps"),
-        includePermalink: get("copy.includePermalink")
+        includePermalink: get("copy.includePermalink"),
+        includeOriginal: get("copy.includeOriginal")
       };
+    }
+    async function translateFirst(members, article) {
+      if (!translate) return false;
+      const posts = members ?? allPosts().filter((post) => article.contains(post));
+      const result = await translate.translateForCopy(posts, {
+        onProgress: (done, total) => toast(`Translating ${done} of ${total}…`, "info", PROGRESS_KEY)
+      });
+      if (result.stopped) {
+        toast("Translation stopped; copying what is there", "info", PROGRESS_KEY);
+      } else if (result.skipped > 0) {
+        toast(`Translated ${result.eligible - result.skipped}; ${result.skipped} more copied as written`, "info", PROGRESS_KEY);
+      }
+      return result.eligible > 0;
     }
     async function copyThread(article, { expandFirst = true } = {}) {
       if (!article) {
@@ -1543,7 +1743,11 @@
           if (members) members = threadMembers(members[0]) ?? members;
         }
       }
-      const post = members ? extractThread(members) : extractPost(article);
+      if (await translateFirst(members, article) && members) {
+        members = threadMembers(members[0]) ?? members;
+      }
+      const options = { annotate: (element) => translate?.translationOf(element) ?? null };
+      const post = members ? extractThread(members, options) : extractPost(article, 0, options);
       if (!post) {
         toast("Could not read this post", "warn");
         return false;
@@ -1730,6 +1934,7 @@
     let idleBeats = 0;
     let scans = 0;
     let clicked = /* @__PURE__ */ new WeakSet();
+    let expandedBodies = /* @__PURE__ */ new WeakSet();
     function publishState() {
       bus.emit(EVENTS.EXPAND_STATE, {
         enabled: get("expand.enabled"),
@@ -1762,6 +1967,10 @@
       if (isMenuLike(element, texts)) return null;
       if (isStructuralReplyCount(element)) {
         return isVisible(element) ? "reply-count" : null;
+      }
+      if (get("expand.truncatedText") && isBodyLinkButton(element)) {
+        if (expandedBodies.has(closestPost(element))) return null;
+        return isVisible(element) ? "truncation" : null;
       }
       if (texts.length === 0) return null;
       if (active.replyCount && texts.some((text) => active.replyCount.test(text))) {
@@ -1807,6 +2016,10 @@
       for (const { kind, target } of findControls(root)) {
         if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
         clicked.add(target);
+        if (kind === "truncation") {
+          const post = closestPost(target);
+          if (post) expandedBodies.add(post);
+        }
         try {
           target.click();
         } catch (error) {
@@ -1868,6 +2081,7 @@
       dirty = true;
       idleBeats = 0;
       clicked = /* @__PURE__ */ new WeakSet();
+      expandedBodies = /* @__PURE__ */ new WeakSet();
       publishState();
     }
     return {
@@ -2275,7 +2489,7 @@
   // src/features/shortcuts.js
   var FOCUS_CLASS = "tc-focus";
   var OVERLAY_ID = "tc-help";
-  var KEY_CAPS = { Escape: "Esc" };
+  var KEY_CAPS = { Escape: "Esc", T: "Shift+T" };
   var SEEN_KEY = "help-seen";
   var BINDINGS = [
     { keys: ["j"], label: "Next post" },
@@ -2283,10 +2497,11 @@
     { keys: ["o"], label: "Expand the focused post" },
     { keys: ["c"], label: "Copy the focused thread" },
     { keys: ["y"], label: "Copy a link to the focused thread" },
-    { keys: ["e"], label: "Pause or resume automatic expansion" },
+    { keys: ["e"], label: "Pause or resume automatic expansion (pausing also stops automatic translation)" },
     { keys: ["a"], label: "Hide the action bars outright, or show them again" },
     { keys: ["r"], label: "Toggle reading mode" },
     { keys: ["t"], label: "Cycle the translation-control mode" },
+    { keys: ["T"], label: "Switch automatic translation on or off" },
     { keys: ["s"], label: "Open settings" },
     { keys: ["p"], label: "Show or hide the status panel" },
     { keys: ["?"], label: "Show this help" },
@@ -2469,6 +2684,12 @@
         case "t":
           cycleTranslateMode();
           break;
+        case "T": {
+          const on = !get("translate.autoWhenVisible");
+          update({ "translate.autoWhenVisible": on });
+          toast(on ? "Automatic translation on" : "Automatic translation off");
+          break;
+        }
         case "s":
           panel?.openSettings?.();
           break;
@@ -2516,8 +2737,26 @@
   var ROW_HIDDEN_CLASS = "tc-translate-row-hidden";
   var MARKER = "tcTranslate";
   var MAX_LABEL_LENGTH5 = 40;
-  function createTranslateTamer({ matchers }) {
+  var TRANSLATE_DWELL_MS = 500;
+  var TRANSLATE_SPACING_MS = 400;
+  var TRANSLATE_TIMEOUT_MS = 8e3;
+  var MAX_COPY_TRANSLATIONS = 40;
+  var POLL_MS = 100;
+  var CONTROL_SELECTOR = 'button, [role="button"], a, [tabindex="0"], span';
+  var ORIGINAL_STATE = /\([^()]*\)\s*$/;
+  var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function createTranslateTamer({ matchers, IntersectionObserverImpl = globalThis.IntersectionObserver }) {
     let active = matchers;
+    let observer = null;
+    const watched = /* @__PURE__ */ new Map();
+    const onScreenSince = /* @__PURE__ */ new Map();
+    const attempted = /* @__PURE__ */ new WeakSet();
+    const queue = [];
+    let queueTimer = null;
+    let lastClick = -Infinity;
+    let expansionPaused = false;
+    let unsubscribeExpand = null;
+    const originals = /* @__PURE__ */ new WeakMap();
     const languageCache = /* @__PURE__ */ new WeakMap();
     function detectFor(article) {
       if (!article) return { language: null, confidence: 0 };
@@ -2525,6 +2764,7 @@
       if (cached) return cached;
       const clone = article.cloneNode(true);
       for (const nested of clone.querySelectorAll(POST_SELECTOR)) nested.remove();
+      clone.querySelectorAll('button, [role="button"], a, time, svg, [aria-hidden="true"]').forEach((node2) => node2.remove());
       const result = detectLanguage(visibleText(clone));
       languageCache.set(article, result);
       return result;
@@ -2538,7 +2778,188 @@
       if (active.translate && texts.some((text) => active.translate.test(text))) {
         return "translate";
       }
+      if (isTranslationLinkButton(element)) {
+        return ORIGINAL_STATE.test(texts[0]) ? "original" : "translate";
+      }
       return null;
+    }
+    function eligibleForAutoTranslate(element) {
+      if (!get("translate.autoWhenVisible")) return false;
+      const post = closestPost(element);
+      if (post && attempted.has(post)) return false;
+      const known = get("translate.knownLanguages");
+      const { language, confidence, ambiguous } = detectFor(post);
+      if (!language) return false;
+      if (ambiguous) return !known.includes("ja") && !known.includes("zh");
+      return confidence >= get("translate.minConfidence") && !known.includes(language);
+    }
+    function unqueue(target) {
+      const index = queue.indexOf(target);
+      if (index !== -1) queue.splice(index, 1);
+    }
+    function forget(target) {
+      observer?.unobserve(target);
+      watched.delete(target);
+      onScreenSince.delete(target);
+      unqueue(target);
+    }
+    function prune() {
+      for (const target of [...watched.keys()]) if (!target.isConnected) forget(target);
+    }
+    function onIntersect(entries) {
+      const now = Date.now();
+      for (const { target, isIntersecting, intersectionRatio } of entries) {
+        if (!watched.has(target)) continue;
+        if (isIntersecting && intersectionRatio > 0) {
+          if (!onScreenSince.has(target)) onScreenSince.set(target, now);
+          if (!queue.includes(target)) queue.push(target);
+        } else {
+          onScreenSince.delete(target);
+          unqueue(target);
+        }
+      }
+      drain();
+    }
+    function drain() {
+      if (queueTimer !== null) return;
+      if (document.visibilityState === "hidden") return;
+      while (queue.length > 0) {
+        const target = queue[0];
+        const since = onScreenSince.get(target);
+        if (since === void 0) {
+          queue.shift();
+          continue;
+        }
+        const wait = Math.max(lastClick + TRANSLATE_SPACING_MS, since + TRANSLATE_DWELL_MS) - Date.now();
+        if (wait > 0) {
+          queueTimer = setTimeout(() => {
+            queueTimer = null;
+            drain();
+          }, wait);
+          return;
+        }
+        queue.shift();
+        const control = watched.get(target);
+        if (!control?.isConnected || control.disabled || classify(control) !== "translate" || !eligibleForAutoTranslate(control)) continue;
+        rememberOriginal(closestPost(control));
+        attempted.add(target);
+        forget(target);
+        lastClick = Date.now();
+        control.click();
+      }
+    }
+    function clearQueue() {
+      clearTimeout(queueTimer);
+      queueTimer = null;
+      queue.length = 0;
+    }
+    function onExpandState({ paused }) {
+      const nowPaused = Boolean(paused);
+      if (nowPaused && !expansionPaused && get("translate.autoWhenVisible")) {
+        update({ "translate.autoWhenVisible": false });
+        bus.emit(EVENTS.TOAST, { message: "Automatic translation off as well" });
+      }
+      expansionPaused = nowPaused;
+    }
+    function controlsOf(post, kind) {
+      return [...post.querySelectorAll(CONTROL_SELECTOR)].filter(
+        (element) => element instanceof HTMLElement && closestPost(element) === post && classify(element) === kind
+      );
+    }
+    function rememberOriginal(post) {
+      if (post && controlsOf(post, "original").length === 0) originals.set(post, extractBody(post));
+    }
+    function translationOf(post) {
+      if (!(post instanceof HTMLElement)) return null;
+      const [control] = controlsOf(post, "original");
+      if (!control) return null;
+      const texts = accessibleTexts(control, { maxLength: MAX_LABEL_LENGTH5 });
+      const label = texts.find((text) => active.showOriginal?.test(text)) ?? texts.find((text) => ORIGINAL_STATE.test(text));
+      const from = /\(([^()]*)\)\s*$/.exec(label ?? "")?.[1]?.trim() || null;
+      return { from, original: originals.get(post) ?? null };
+    }
+    function running() {
+      return get("translate.autoWhenVisible") && !expansionPaused;
+    }
+    async function translated(post) {
+      const end = Date.now() + TRANSLATE_TIMEOUT_MS;
+      while (Date.now() < end) {
+        if (translationOf(post)) return true;
+        if (!running()) return false;
+        await sleep(POLL_MS);
+      }
+      return false;
+    }
+    async function translateForCopy(posts, { onProgress } = {}) {
+      const result = { translated: 0, eligible: 0, skipped: 0, stopped: false };
+      if (!running()) return result;
+      const queued = [];
+      for (const post of posts) {
+        const [control] = controlsOf(post, "translate");
+        if (control && eligibleForAutoTranslate(control)) queued.push(post);
+      }
+      result.eligible = queued.length;
+      const batch = queued.slice(0, MAX_COPY_TRANSLATIONS);
+      result.skipped = queued.length - batch.length;
+      for (const [index, post] of batch.entries()) {
+        const wait = lastClick + TRANSLATE_SPACING_MS - Date.now();
+        if (wait > 0) await sleep(wait);
+        if (!running()) {
+          result.stopped = true;
+          break;
+        }
+        const [control] = controlsOf(post, "translate");
+        if (!control || !eligibleForAutoTranslate(control)) continue;
+        onProgress?.(index + 1, batch.length);
+        rememberOriginal(post);
+        attempted.add(post);
+        forget(post);
+        lastClick = Date.now();
+        control.click();
+        if (await translated(post)) result.translated += 1;
+        else if (!running()) {
+          result.stopped = true;
+          break;
+        }
+      }
+      return result;
+    }
+    function onClickCapture(event) {
+      const target = event.target instanceof Element ? event.target.closest(CONTROL_SELECTOR) : null;
+      if (target instanceof HTMLElement && classify(target) === "translate") {
+        rememberOriginal(closestPost(target));
+      }
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        clearTimeout(queueTimer);
+        queueTimer = null;
+      } else {
+        drain();
+      }
+    }
+    function configureObserver() {
+      if (!get("translate.autoWhenVisible") || typeof IntersectionObserverImpl !== "function") {
+        observer?.disconnect();
+        observer = null;
+        watched.clear();
+        onScreenSince.clear();
+        clearQueue();
+        return;
+      }
+      if (!observer) observer = new IntersectionObserverImpl(onIntersect, { threshold: 0 });
+      prune();
+    }
+    function watchForTranslation(control) {
+      if (!observer) return false;
+      const target = closestPost(control) ?? control;
+      if (!eligibleForAutoTranslate(control)) {
+        if (watched.has(target)) forget(target);
+        return false;
+      }
+      if (!watched.has(target)) observer.observe(target);
+      watched.set(target, control);
+      return true;
     }
     function rowHost(element) {
       const parent = element.parentElement;
@@ -2567,6 +2988,7 @@
       if (host) host.classList.remove(ROW_CLASS, ROW_HIDDEN_CLASS);
     }
     function sweep(root = document) {
+      configureObserver();
       const mode = get("translate.mode");
       const selector = 'button, [role="button"], a, [tabindex="0"], span';
       let compacted = 0;
@@ -2578,14 +3000,14 @@
           if (element.dataset[MARKER]) clear(element);
           continue;
         }
+        const autoTranslate = kind === "translate" && watchForTranslation(element);
         if (mode === "off") {
           clear(element);
           continue;
         }
         element.dataset[MARKER] = kind;
         if (kind === "original") {
-          apply(element, { compact: true, hidden: false });
-          compacted += 1;
+          apply(element, { compact: false, hidden: false });
           continue;
         }
         let shouldHide = mode === "hide";
@@ -2595,6 +3017,7 @@
           const { language, confidence } = detectFor(closestPost(element));
           shouldHide = Boolean(language) && confidence >= minConfidence && known.includes(language);
         }
+        if (autoTranslate) shouldHide = false;
         apply(element, { compact: true, hidden: shouldHide });
         if (shouldHide) hidden += 1;
         else compacted += 1;
@@ -2607,10 +3030,22 @@
     const scheduleSweep = debounce(() => sweep(), 200);
     return {
       start() {
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        document.addEventListener("click", onClickCapture, true);
+        unsubscribeExpand = bus.on(EVENTS.EXPAND_STATE, onExpandState);
         sweep();
       },
       stop() {
         scheduleSweep.cancel();
+        observer?.disconnect();
+        observer = null;
+        watched.clear();
+        onScreenSince.clear();
+        clearQueue();
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        document.removeEventListener("click", onClickCapture, true);
+        unsubscribeExpand?.();
+        unsubscribeExpand = null;
         for (const element of document.querySelectorAll(`.${COMPACT_CLASS}, .${HIDDEN_CLASS2}, .${ROW_CLASS}, .${ROW_HIDDEN_CLASS}`)) {
           clear(element);
         }
@@ -2618,6 +3053,8 @@
       onDomChanged() {
         scheduleSweep();
       },
+      translationOf,
+      translateForCopy,
       onNavigate() {
         scheduleSweep();
       },
@@ -4478,15 +4915,29 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   function createToaster() {
     let container = null;
     let unsubscribe = null;
+    const keyed = /* @__PURE__ */ new Map();
     function ensureContainer() {
       if (container?.isConnected) return container;
       container = el("div", { id: CONTAINER_ID, role: "status", "aria-live": "polite" });
       document.body.append(container);
       return container;
     }
-    function show({ message, tone = "info", duration = VISIBLE_MS }) {
+    function dismiss(toast, key) {
+      toast.classList.remove("tc-in");
+      setTimeout(() => toast.remove(), 250);
+      if (key && keyed.get(key)?.toast === toast) keyed.delete(key);
+    }
+    function show({ message, tone = "info", duration = VISIBLE_MS, key = null }) {
       if (!message) return;
       const host = ensureContainer();
+      const current2 = key ? keyed.get(key) : null;
+      if (current2?.toast.isConnected) {
+        current2.toast.textContent = message;
+        current2.toast.classList.toggle("tc-warn", tone === "warn");
+        clearTimeout(current2.timer);
+        current2.timer = setTimeout(() => dismiss(current2.toast, key), duration);
+        return;
+      }
       while (host.children.length >= MAX_VISIBLE) host.firstElementChild?.remove();
       const toast = el("div", {
         className: `tc-toast${tone === "warn" ? " tc-warn" : ""}`,
@@ -4494,10 +4945,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       });
       host.append(toast);
       requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add("tc-in")));
-      setTimeout(() => {
-        toast.classList.remove("tc-in");
-        setTimeout(() => toast.remove(), 250);
-      }, duration);
+      const timer = setTimeout(() => dismiss(toast, key), duration);
+      if (key) keyed.set(key, { toast, timer });
     }
     return {
       start() {
@@ -4514,18 +4963,38 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.0.8" : "0.0.0-dev";
+  var VERSION = true ? "1.1.0" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "1f69d3c" : "dev";
+  var BUILD = true ? "a02d930" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
     "advanced.extraExpandText",
     "advanced.extraPromoted"
   ];
+  function interfaceLanguages() {
+    return resolveLanguages(pageLanguage(), get("general.languages"));
+  }
+  function languageName(code) {
+    try {
+      return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  }
+  function noticeUnsupportedLanguage() {
+    const { page, supported } = interfaceLanguages();
+    if (supported) return;
+    const message = `Engage is in ${languageName(page)}, which Threadcalm has no labels for yet: threads, "See more" and translation work, but "Show previous comments" and sponsored cards are not recognised.`;
+    log.warn(message);
+    const key = `language-notice-${page}`;
+    if (getValue(key, false)) return;
+    setValue(key, true);
+    bus.emit(EVENTS.TOAST, { message, tone: "warn", duration: 9e3 });
+  }
   function main() {
     load();
-    let matchers = buildMatchers(get("general.languages"), customPatterns());
+    let matchers = buildMatchers(interfaceLanguages().codes, customPatterns());
     addStyle(ALL_STYLES);
     const expander = createExpander({ matchers });
     const translate = createTranslateTamer({ matchers });
@@ -4533,7 +5002,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     const highlighter = createHighlighter({ matchers });
     const quietChrome = createQuietChrome();
     const readingMode = createReadingMode();
-    const copyTools = createCopyTools({ expander });
+    const copyTools = createCopyTools({ expander, translate });
     const toaster = createToaster();
     const panel = createPanel({
       expander,
@@ -4575,12 +5044,13 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     });
     bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
       if (MATCHER_KEYS.some((key) => key in changed)) {
-        matchers = buildMatchers(get("general.languages"), customPatterns());
+        matchers = buildMatchers(interfaceLanguages().codes, customPatterns());
         for (const feature of features) feature.setMatchers?.(matchers);
       }
       dispatch("onSettingsChanged", changed);
     });
     for (const feature of features) feature.start?.();
+    noticeUnsupportedLanguage();
     startSpaWatcher();
     registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode });
     log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
@@ -4661,6 +5131,12 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       }
       lines.push(`  ${String(count).padStart(4)}  ${label}  (${selector})`);
     }
+    const { page, codes, supported } = interfaceLanguages();
+    lines.push(
+      "",
+      `interface language: ${page ?? "(not declared)"}${supported ? "" : " (no label set)"}`,
+      `label sets in use: ${codes.length ? codes.join(", ") : "en (fallback)"}`
+    );
     lines.push("", `posts resolved: ${rootPosts().length}`);
     lines.push(...activityLines(), "");
     if (!control) {

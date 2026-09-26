@@ -46,10 +46,11 @@ per-page click limit has been reached.
 | <kbd>o</kbd> | Expand the focused post |
 | <kbd>c</kbd> | Copy the focused thread |
 | <kbd>y</kbd> | Copy a link to the focused thread |
-| <kbd>e</kbd> | Pause or resume automatic expansion |
+| <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Reading mode on or off |
 | <kbd>t</kbd> | Cycle the translation-control mode |
+| <kbd>Shift</kbd>+<kbd>T</kbd> | Switch automatic translation on or off |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>s</kbd> | Open settings |
 | <kbd>?</kbd> | Show the shortcut list |
@@ -95,13 +96,47 @@ the noisiest chrome on the page. Four modes, cycled with <kbd>t</kbd>:
 | **Always hide** | Hidden regardless. |
 | **Leave unchanged** | Exactly as Engage rendered it. |
 
-`Show original` is only ever compacted, never hidden — hiding the way back out of a translation
-would strand you inside it.
+`Show original` is never compacted or hidden, whatever the mode. It is the way back out of a
+translation, and its label — `Show original (Japanese)` — is what tells you the text in front of you
+is not what the author wrote.
+
+### Automatic translation
+
+Off by default. Switch on **Automatic translation** — in the settings, or with
+<kbd>Shift</kbd>+<kbd>T</kbd> — and Threadcalm presses Engage's own
+`Show translation` for you, once per post, when the post is on your screen — and only when it is
+confidently in a language that is not on your **Languages I read** list.
+
+- **Off means off, at once.** <kbd>Shift</kbd>+<kbd>T</kbd> again, or unticking the setting, stops
+  it immediately, including posts already waiting their turn. Posts it has translated stay
+  translated; `Show original` takes each one back.
+- **Pausing expansion switches it off too.** <kbd>e</kbd>, the panel's pause button or the
+  Tampermonkey menu: whichever you reach for when the script is doing too much, translation stops
+  with it. Resuming expansion does not switch translation back on.
+- **Only what you are looking at.** A post is translated after it has been on screen for half a
+  second. The one exception is copying a thread — see [Translated posts](#translated-posts). Posts you scroll past, posts further down that you never reach, and anything in a
+  background tab are left alone.
+
+- **It is Engage's translation.** Threadcalm clicks the native control; the text goes to Microsoft's
+  translation service exactly as if you had clicked it yourself. Threadcalm itself still sends
+  nothing anywhere.
+- **Once per post.** Press `Show original` and the post stays in its original language.
+- **Unsure means no.** Posts too short to judge ("Merci !") are left for you to translate by hand.
+  Text written only in Chinese characters could be Chinese or Japanese; it is translated only if you
+  read neither.
+- **One at a time.** When several foreign posts are on screen at once, they are translated a
+  fraction of a second apart rather than in a single burst.
+- It works in every mode, including *Leave unchanged*, and wins over hiding: a post it is about to
+  translate keeps its control.
 
 ### How the language check works
 
-A stop-word count over the post's own text, minus its replies, in the page. No model, no network,
-about a kilobyte of word lists. It reports a confidence score, and the control is hidden only above
+A stop-word count over the post's own text, minus its replies, links and buttons, in the page.
+Japanese, Chinese, Korean, Greek, Thai, Armenian and Georgian are recognised by their writing system
+instead, and that takes precedence: a Japanese post quoting a paragraph of English is still a
+Japanese post, and is translated for a reader who does not read Japanese. It takes about a short
+sentence in that script to count, so one borrowed word in an English post does not. No model, no network, about a kilobyte of word lists. It reports a confidence score, and
+the control is hidden — or the post translated automatically — only above
 **Minimum detection confidence**.
 
 It is reliable on a paragraph and unreliable on "Thanks!", so it declines to guess rather than risk
@@ -269,6 +304,43 @@ We are moving the release to the end of the month.
 
 Plain text indents them instead. Authors, timestamps and the permalink are each switchable.
 
+### Translated posts
+
+**A translation is always marked.** On the page, `Show original (Japanese)` tells you a post is not
+in its author's words; in a copy that cue would be gone, so a translated post is followed by
+*Translated from Japanese by Engage.* That holds whether Threadcalm translated it or you did.
+
+**With automatic translation on, <kbd>c</kbd> translates the whole thread first** — including the
+posts that are not on your screen, which automatic translation otherwise never touches. You asked
+for the whole conversation, so its foreign posts are translated before it is copied, under the
+same rules otherwise: only posts confidently in a language you do not read, never one you turned
+back to its original, one at a time. A toast counts them off ("Translating 3 of 7…").
+
+- A post Engage does not translate within a few seconds is copied as written.
+- At most 40 posts are translated per copy; the rest are copied as written, and the toast says so.
+- <kbd>Shift</kbd>+<kbd>T</kbd> or pausing expansion stops it between posts, and what is there is copied.
+- The posts stay translated on the page afterwards.
+
+With automatic translation off, <kbd>c</kbd> copies what the page shows and translates nothing.
+
+**Include the original under translated posts** (off by default) adds the text as its author wrote
+it below the translation, so whoever reads the copy can check it:
+
+```markdown
+> **Grace Hopper** — 2026-09-01 10:00
+>
+> Thanks, that works for us.
+>
+> *Translated from Japanese by Engage.*
+>
+> *Original:*
+>
+> ありがとうございます、それで大丈夫です。
+```
+
+The original is captured at the moment a post is translated. For a post translated before
+Threadcalm was running, the copy says the original was not captured.
+
 **Accuracy caveat.** Engage exposes no supported DOM contract, so extraction is best-effort: it
 reads authors, bodies, timestamps and reply nesting, and strips action-bar labels. Check anything
 you are about to paste somewhere that matters. For records, legal hold or migration, use the API or
@@ -277,18 +349,28 @@ Microsoft's export tooling instead — see
 
 ## Languages and custom patterns
 
-Reply counters, action rows and menus are recognised structurally and need no label pack at all.
-Everything else — reply pagination, `See more`, the translation controls, promoted-content markers
-— is matched on what the interface *says*, because that is the only other part of Engage's markup
-that is stable. That part is locale-bound.
+Most of Threadcalm needs no labels at all. Recognised by their structure, in every interface
+language:
 
-Packs ship for English, German, French, Spanish, Dutch and Italian. English, German and French
-have been checked against a live tenant; Spanish, Dutch and Italian are offered as a starting point
-and have not, so corrections to them are welcome.
+- reply counters (a button with Engage's reply glyph and a leading number);
+- action rows and menus;
+- `See more` on a long post (Engage's link-styled button inside the post body);
+- `Show translation` and `Show original (…)` (the same kind of button, between the body and the
+  action row; the source language in brackets is what marks a post as translated).
 
-**If a text-matched control is not being found, this is almost always why.** Add your tenant's
-interface language under *Interface languages to recognise* — note that this is the language of the
-Engage **UI**, not of the posts.
+Only reply pagination ("Show 3 previous comments") and sponsored or suggested cards are still
+matched on what the interface *says*. Label packs cover all 36 languages Engage offers, from labels
+observed on a live page in each of them; pagination is known in English, German, French, Spanish,
+Dutch, Italian and Arabic so far.
+
+**The right pack is chosen for you.** Engage writes your interface language into the page, from
+your own Engage language setting, and Threadcalm uses the matching pack automatically. When Engage
+is in a language with no pack, Threadcalm says so once, and *Copy layout diagnostics* reports it.
+Thread expansion by reply counter keeps working; the text-matched controls above do not, until a
+pack or your own patterns cover them.
+
+*Additional interface languages* is only for pages that mix several, or to add a pack by hand. It
+is the language of the Engage **UI**, not of the posts.
 
 If your tenant words something unusually, the **Advanced** group takes your own regular
 expressions, one per line, matched case-insensitively against control labels:
@@ -323,6 +405,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | "Show translation" control | Compact icon |
 | Languages I read | English, German |
 | Minimum detection confidence | 0.55 |
+| Automatic translation | off |
 
 ### Post chrome
 
@@ -348,6 +431,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Copy format | Markdown |
 | Include the thread link | on |
 | Include timestamps | on |
+| Include the original under translated posts | off |
 | Copy buttons on posts | Show when I point at a post |
 | Where the copy buttons sit | Top right |
 | Keyboard shortcuts | on |
@@ -357,7 +441,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Setting | Default |
 |---|---|
 | Show the status panel | on |
-| Interface languages to recognise | English, German |
+| Additional interface languages | none (the page's own language is used) |
 | Reply icon signatures | Engage's reply-arrow path |
 | Verbose console logging | off |
 | Extra patterns (three lists) | empty |
@@ -386,8 +470,9 @@ usage**, then **Measure**, and compare the same figure an hour later — the lev
 is the one that means anything.
 
 **Reply counters work, but pagination or `See more` does not.** Those are still matched by
-wording. Add your language under *Interface languages to recognise*, or add a pattern under
-*Advanced*.
+wording, and your Engage language may have no pack yet: Threadcalm will have said so, and
+*Copy layout diagnostics* shows it. Add a pattern under *Advanced* meanwhile, and please report the
+language.
 
 **Nothing expands at all, in any language.** Engage may have changed its reply glyph. The path
 prefix lives in *Reply icon signatures* under *Advanced* and can be corrected there without waiting

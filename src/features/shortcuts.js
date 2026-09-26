@@ -21,7 +21,7 @@ export const FOCUS_CLASS = 'tc-focus';
 const OVERLAY_ID = 'tc-help';
 
 /** What a key is called on the keycap, where that differs from its event name. */
-const KEY_CAPS = { Escape: 'Esc' };
+const KEY_CAPS = { Escape: 'Esc', T: 'Shift+T' };
 
 /** Remembers that the shortcut list has been shown once. */
 const SEEN_KEY = 'help-seen';
@@ -36,10 +36,11 @@ export const BINDINGS = [
   { keys: ['o'], label: 'Expand the focused post' },
   { keys: ['c'], label: 'Copy the focused thread' },
   { keys: ['y'], label: 'Copy a link to the focused thread' },
-  { keys: ['e'], label: 'Pause or resume automatic expansion' },
+  { keys: ['e'], label: 'Pause or resume automatic expansion (pausing also stops automatic translation)' },
   { keys: ['a'], label: 'Hide the action bars outright, or show them again' },
   { keys: ['r'], label: 'Toggle reading mode' },
   { keys: ['t'], label: 'Cycle the translation-control mode' },
+  { keys: ['T'], label: 'Switch automatic translation on or off' },
   { keys: ['s'], label: 'Open settings' },
   { keys: ['p'], label: 'Show or hide the status panel' },
   { keys: ['?'], label: 'Show this help' },
@@ -262,6 +263,14 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
       case 't':
         cycleTranslateMode();
         break;
+      case 'T': {
+        const on = !settings.get('translate.autoWhenVisible');
+        // Written as a setting, so switching off reaches the translate feature
+        // at once and stops anything still waiting its turn.
+        settings.update({ 'translate.autoWhenVisible': on });
+        toast(on ? 'Automatic translation on' : 'Automatic translation off');
+        break;
+      }
       case 's':
         panel?.openSettings?.();
         break;
