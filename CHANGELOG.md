@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-26
+
+### Changed
+
+- **The README and the Greasy Fork listing now lead with translation.** Reading a thread written in
+  several languages is what 1.1.0 changed most, and both described it only in passing. The README
+  gains a *Reading threads in other languages* section and two feature rows; the listing a feature
+  bullet. No change to the script.
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
@@ -326,6 +335,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.1.1]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.0
 [1.0.8]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.8
 [1.0.7]: https://github.com/Tauris/threadcalm/releases/tag/v1.0.7

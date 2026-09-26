@@ -1,8 +1,9 @@
 # Threadcalm
 
 A userscript that makes [Microsoft Viva Engage](https://engage.cloud.microsoft/) (formerly Yammer)
-readable: it opens whole threads for you, lets you copy a conversation as Markdown, quiets the
-per-post translation prompts, and adds the keyboard shortcuts the web app never had.
+readable: it opens whole threads for you, translates the posts you cannot read as you scroll to
+them, lets you copy a conversation as Markdown, and adds the keyboard shortcuts the web app never
+had.
 
 [![CI](https://github.com/Tauris/threadcalm/actions/workflows/ci.yml/badge.svg)](https://github.com/Tauris/threadcalm/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
@@ -13,14 +14,17 @@ per-post translation prompts, and adds the keyboard shortcuts the web app never 
 ## Why
 
 Reading a long Engage thread means clicking `3 replies`, then `Show previous replies`, then
-`See more`, over and over, while a `Show translation` link sits under every single post. None of
-that is reading. Threadcalm does the clicking.
+`See more`, over and over. In a multilingual organisation it also means `Show translation` under
+every post, clicked one post at a time. None of that is reading. Threadcalm does the clicking —
+including the translating.
 
 ## Features
 
 | | |
 |---|---|
 | **Whole-thread expansion** | Clicks reply counters, reply pagination and truncated post text until the conversation is fully open, then stops. |
+| **Foreign-language threads, translated** | Switch on automatic translation (<kbd>Shift</kbd>+<kbd>T</kbd>) and every post in a language you do not read is translated as it comes on screen, using Engage's own translation — Japanese, Chinese, Korean and other scripts recognised even when they quote English. Posts you read are left alone, and `Show original` is always one click away. |
+| **Translations you can copy** | Copying a thread translates its foreign posts first, marks each translation as such, and can add the original under it for anyone who wants to check. |
 | **Compact translation controls** | Collapses `Show translation` to a small globe that expands on hover or focus — or hides it entirely on posts already written in a language you read. |
 | **Copy as Markdown** | Copies a thread, replies nested as blockquotes, with authors, timestamps and a permalink. Plain text too. |
 | **Keyboard shortcuts** | `j`/`k` to move between posts, `c` to copy, `o` to expand, `?` for the list. |
@@ -70,6 +74,29 @@ live behind its **Settings** button, and the script also registers commands in t
 Shortcuts are ignored while you are typing. The list is shown once on first run; after that
 press <kbd>?</kbd> or use the **?** button in the panel.
 
+### Reading threads in other languages
+
+Switch on **automatic translation** — <kbd>Shift</kbd>+<kbd>T</kbd>, or in the settings — and a
+thread in half a dozen languages reads as one. As you scroll, each post that is confidently in a
+language you do not read is translated with Engage's own `Show translation`, once, after it has
+been on screen for half a second.
+
+- **Only what you need.** Posts in the languages you list under *Languages I read* are left alone,
+  and so are posts too short to judge. Japanese, Chinese, Korean, Greek, Thai, Armenian and
+  Georgian are recognised by their writing system, so a Japanese post that quotes English is still
+  translated for an English reader.
+- **Only what you look at.** Posts you scroll past, or never reach, are not translated.
+- **Always reversible.** `Show original (Japanese)` stays visible under every translated post, and a
+  post you turn back stays in its original.
+- **Easy to stop.** <kbd>Shift</kbd>+<kbd>T</kbd> again, or pausing expansion with <kbd>e</kbd>,
+  stops it at once.
+- **In copies too.** <kbd>c</kbd> translates the thread's foreign posts first — including those off
+  screen — and marks each one: *Translated from Japanese by Engage.* The original can be included
+  underneath.
+
+It is Engage's translation: Threadcalm presses the button, and sends nothing anywhere itself. Off
+by default. See the [guide](docs/USAGE.md#automatic-translation).
+
 ### Translation controls
 
 `Show translation` under every post is the noisiest thing in a multilingual tenant. Four modes,
@@ -86,11 +113,6 @@ switchable with <kbd>t</kbd>:
 
 `Show original` is never compacted or hidden: it is the way back out of a translation, and its
 label (`Show original (Japanese)`) says which language you are reading a translation of.
-
-**Automatic translation** (off by default) presses Engage's own `Show translation` once per post, for
-posts on your screen that are confidently in a language you do not read. <kbd>Shift</kbd>+<kbd>T</kbd>
-switches it on and off, and pausing expansion with <kbd>e</kbd> switches it off too. Unsure means no;
-see the [guide](docs/USAGE.md#automatic-translation).
 
 ### Copying a thread
 

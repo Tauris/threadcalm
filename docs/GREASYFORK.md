@@ -1,5 +1,5 @@
-**Makes Microsoft Viva Engage readable.** Threadcalm opens whole threads for you, copies a
-conversation as Markdown, quiets the translation prompts under every post, and adds keyboard
+**Makes Microsoft Viva Engage readable.** Threadcalm opens whole threads for you, translates the
+posts you cannot read as you scroll to them, copies a conversation as Markdown, and adds keyboard
 shortcuts the web app never had.
 
 > **Independent project.** Not affiliated with, endorsed by or supported by Microsoft.
@@ -10,6 +10,10 @@ shortcuts the web app never had.
 
 - **Opens whole threads.** Clicks reply counters, "show previous comments" and "see more"
   until the conversation is fully open &mdash; then stops. It never clicks menus.
+- **Reads foreign-language threads for you.** Switch on automatic translation (`Shift+T`) and
+  every post in a language you do not read is translated as it comes on screen, with Engage's own
+  translation. Posts you read are left alone; `Show original` is always one click away. Japanese,
+  Chinese, Korean and other scripts are recognised even when a post quotes English.
 - **Copies a thread as Markdown or plain text**, with authors, timestamps, reply nesting and
   a link back. Press `c` on any post in the thread.
 - **Quiets the page.** The Like / Comment / Share bar, the comment boxes, the copy buttons and
