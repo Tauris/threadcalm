@@ -225,10 +225,11 @@ function ownOf(post, selector) {
  * tell apart -- so callers must click it at most once per post.
  */
 export function isBodyLinkButton(element) {
+  const body = element instanceof HTMLElement ? element.closest(BODY_WRAPPER_SELECTOR) : null;
   return (
     isInlineLinkButton(element) &&
-    element.closest(BODY_WRAPPER_SELECTOR) !== null &&
-    closestPost(element) !== null
+    body !== null &&
+    (closestPost(element) !== null || element.closest('.qaThreadStarter') !== null)
   );
 }
 

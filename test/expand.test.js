@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildMatchers } from '../src/core/i18n.js';
+import { closestPost } from '../src/core/dom.js';
 import * as settings from '../src/core/settings.js';
 import { createExpander } from '../src/features/expand.js';
 import { control, counterControl, createPost, mountFeed, stubLayout } from './fixtures.js';
@@ -111,6 +112,29 @@ describe('control classification', () => {
     expect(_internals.classify(seeMore)).toBe('truncation');
   });
 
+  it('recognizes truncated text in a thread starter without a local action row', () => {
+    const { _internals } = newExpander();
+    const starter = document.createElement('div');
+    starter.className = 'y-block qaThreadStarter';
+    const body = document.createElement('div');
+    body.className = 'y-block contentStateBodyTextWrapper-287';
+    const button = document.createElement('button');
+    const label = document.createElement('span');
+    label.className = 'y-fakeLink';
+    label.textContent = 'see more';
+    button.append(label);
+    let clicks = 0;
+    button.addEventListener('click', () => { clicks += 1; });
+    body.append(button);
+    starter.append(body);
+    document.body.append(starter);
+
+    expect(closestPost(button)).toBe(null);
+    expect(_internals.classify(button)).toBe('truncation');
+    expect(newExpander().expandWithin(starter)).toBe(1);
+    expect(clicks).toBe(1);
+  });
+
   it('skips truncation controls when the setting is off', () => {
     settings.update({ 'expand.truncatedText': false });
     const { _internals } = newExpander();
@@ -145,6 +169,63 @@ describe('click targeting', () => {
     const { _internals } = newExpander();
     const found = _internals.findControls(document);
     expect(found).toHaveLength(1);
+  });
+
+  it('expands a later body when it shares a fallback post container', () => {
+    const container = document.createElement('div');
+    container.className = 'y-fixedGridColumn';
+    const actions = document.createElement('div');
+    actions.setAttribute('data-testid', 'overflow-set');
+    container.append(actions);
+
+    const makeBody = (suffix, onClick) => {
+      const starter = document.createElement('div');
+      starter.className = 'thread-item';
+      const body = document.createElement('div');
+      body.className = `contentStateBodyTextWrapper-${suffix}`;
+      const button = document.createElement('button');
+      const label = document.createElement('span');
+      label.className = 'y-fakeLink';
+      label.textContent = 'see more';
+      button.append(label);
+      button.addEventListener('click', onClick);
+      body.append(button);
+      starter.append(body);
+      container.append(starter);
+      return body;
+    };
+
+    let firstClicks = 0;
+    let laterClicks = 0;
+    const firstBody = makeBody('first', () => { firstClicks += 1; });
+    document.body.append(container);
+    const expander = newExpander();
+
+    const firstButton = firstBody.querySelector('button');
+    expect(closestPost(firstButton)).toBe(container);
+    expect(expander.expandWithin(firstBody)).toBe(1);
+    expect(expander._internals.classify(firstButton)).toBe(null);
+
+    const replacement = document.createElement('button');
+    const replacementLabel = document.createElement('span');
+    replacementLabel.className = 'y-fakeLink';
+    replacementLabel.textContent = 'see less';
+    replacement.append(replacementLabel);
+    firstBody.append(replacement);
+    expect(expander._internals.findControls(firstBody)).toHaveLength(0);
+
+    const labelFallback = document.createElement('button');
+    labelFallback.textContent = 'See more';
+    firstBody.append(labelFallback);
+    expect(expander._internals.classify(labelFallback)).toBe(null);
+
+    const laterBody = makeBody('later', () => { laterClicks += 1; });
+    const laterButton = laterBody.querySelector('button');
+    expect(closestPost(laterButton)).toBe(container);
+    expect(expander._internals.findControls(laterBody)).toHaveLength(1);
+    expect(expander.expandWithin(laterBody)).toBe(1);
+    expect(firstClicks).toBe(1);
+    expect(laterClicks).toBe(1);
   });
 });
 

@@ -28,6 +28,7 @@
 import { bus, EVENTS } from '../core/bus.js';
 import {
   accessibleTexts,
+  BODY_WRAPPER_SELECTOR,
   closestPost,
   hasIconSignature,
   isBodyLinkButton,
@@ -89,8 +90,8 @@ export function createExpander({ matchers }) {
   // freely but a given DOM node only ever needs to be opened once. A WeakSet
   // also lets detached nodes be collected after a re-render.
   let clicked = new WeakSet();
-  // Posts whose "see more" has been clicked. Recognised by structure alone,
-  // "see more" and "see less" are the same button, so a post is expanded once.
+  // Body wrappers whose "see more" has been clicked. The control may be
+  // replaced during a render, but another body in the same container is independent.
   let expandedBodies = new WeakSet();
 
   function publishState() {
@@ -151,7 +152,7 @@ export function createExpander({ matchers }) {
     // "see more" by structure: an inline link button inside the post body.
     // Holds in every interface language; wording below is the fallback.
     if (settings.get('expand.truncatedText') && isBodyLinkButton(element)) {
-      if (expandedBodies.has(closestPost(element))) return null;
+      if (expandedBodies.has(element.closest(BODY_WRAPPER_SELECTOR))) return null;
       return isVisible(element) ? 'truncation' : null;
     }
 
@@ -171,6 +172,8 @@ export function createExpander({ matchers }) {
     ) {
       // A bare "See more" is only trustworthy inside a post.
       if (!closestPost(element)) return null;
+      const body = element.closest(BODY_WRAPPER_SELECTOR);
+      if (body && expandedBodies.has(body)) return null;
       return isVisible(element) ? 'truncation' : null;
     }
     return null;
@@ -220,8 +223,8 @@ export function createExpander({ matchers }) {
       if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
       clicked.add(target);
       if (kind === 'truncation') {
-        const post = closestPost(target);
-        if (post) expandedBodies.add(post);
+        const body = target.closest(BODY_WRAPPER_SELECTOR);
+        if (body) expandedBodies.add(body);
       }
       try {
         target.click();
