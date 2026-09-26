@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
+import { allPosts, closestPost, isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
 import { buildMatchers } from '../src/core/i18n.js';
 import * as settings from '../src/core/settings.js';
 import { createExpander } from '../src/features/expand.js';
+import { threadMembers } from '../src/features/thread.js';
 import { COMPACT_CLASS, TRANSLATE_DWELL_MS, createTranslateTamer } from '../src/features/translate.js';
 import { stubLayout } from './fixtures.js';
 
@@ -178,5 +179,55 @@ describe('the translation control in any language', () => {
     vi.advanceTimersByTime(TRANSLATE_DWELL_MS);
 
     expect(click).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a thread starter without its own action row', () => {
+  /** The layout from the 1.1.1.18 handoff: the starter holds no action row. */
+  function rowlessThread() {
+    const { post: starter, translation } = engagePost();
+    starter.querySelector('[data-testid="overflow-set"]').remove();
+    const main = starter.parentElement;
+
+    const reply = document.createElement('div');
+    reply.className = 'y-fixedGridColumn';
+    reply.textContent = 'Merci, bien reçu, nous allons regarder cela ensemble demain matin.';
+    const actions = document.createElement('div');
+    actions.setAttribute('data-testid', 'overflow-set');
+    reply.append(actions);
+    main.append(reply);
+    return { starter, translation, reply };
+  }
+
+  it('is still a post', () => {
+    const { starter, translation } = rowlessThread();
+    expect(closestPost(translation)).toBe(starter);
+    expect(allPosts()).toContain(starter);
+  });
+
+  it('comes first, in document order', () => {
+    const { starter, reply } = rowlessThread();
+    expect(allPosts()).toEqual([starter, reply]);
+  });
+
+  it('keeps its translation control recognisable', () => {
+    const { translation } = rowlessThread();
+    expect(isTranslationLinkButton(translation)).toBe(true);
+  });
+
+  it('is copied with its replies', () => {
+    const { starter, reply } = rowlessThread();
+    expect(threadMembers(reply)).toEqual([starter, reply]);
+  });
+
+  it('is not listed twice when a found post already wraps it', () => {
+    const { starter } = rowlessThread();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'y-fixedGridColumn';
+    starter.replaceWith(wrapper);
+    const row = document.createElement('div');
+    row.setAttribute('data-testid', 'overflow-set');
+    wrapper.append(starter, row);
+    expect(allPosts().filter((post) => post === starter)).toHaveLength(0);
   });
 });

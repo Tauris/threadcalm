@@ -168,9 +168,21 @@ export const POST_SELECTOR =
 /** Semantic containers, which need no corroboration. */
 const SEMANTIC_POST_SELECTOR = '[role="article"], article';
 
-/** A class-matched candidate counts as a post only if it owns an action row. */
+/**
+ * The first post of a conversation. Unlike `.y-fixedGridColumn`, which also
+ * marks layout columns, this class names exactly one thing, so it counts as a
+ * post even without an action row inside it: on some pages the starter's row
+ * is rendered outside it, and requiring one made the starter invisible to
+ * "see more", the translation controls and copying.
+ */
+export const STARTER_SELECTOR = '.qaThreadStarter';
+
+/**
+ * A class-matched candidate counts as a post only if it owns an action row --
+ * except a thread starter, which is a post whatever it contains.
+ */
 function looksLikePost(element) {
-  return element.querySelector(ACTION_ROW_SELECTOR) !== null;
+  return element.querySelector(ACTION_ROW_SELECTOR) !== null || element.matches(STARTER_SELECTOR);
 }
 
 /** The post/comment container an element belongs to. */
@@ -225,11 +237,10 @@ function ownOf(post, selector) {
  * tell apart -- so callers must click it at most once per post.
  */
 export function isBodyLinkButton(element) {
-  const body = element instanceof HTMLElement ? element.closest(BODY_WRAPPER_SELECTOR) : null;
   return (
     isInlineLinkButton(element) &&
-    body !== null &&
-    (closestPost(element) !== null || element.closest('.qaThreadStarter') !== null)
+    element.closest(BODY_WRAPPER_SELECTOR) !== null &&
+    closestPost(element) !== null
   );
 }
 
@@ -246,9 +257,10 @@ export function isTranslationLinkButton(element) {
   const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
   const bodies = ownOf(post, BODY_WRAPPER_SELECTOR);
   const rows = ownOf(post, ACTION_ROW_SELECTOR);
+  // A starter may have no action row of its own; then below the body is enough.
   return (
     bodies.some((body) => follows(body, element)) &&
-    rows.some((row) => follows(element, row))
+    (rows.length === 0 || rows.some((row) => follows(element, row)))
   );
 }
 
@@ -290,6 +302,21 @@ export function allPosts(root = document) {
     if (!post || seen.has(post) || !isVisible(post)) continue;
     seen.add(post);
     posts.push(post);
+  }
+
+  // A starter whose action row is rendered outside it is found by no row.
+  let added = false;
+  for (const starter of root.querySelectorAll(STARTER_SELECTOR)) {
+    if (seen.has(starter) || starter.querySelector(ACTION_ROW_SELECTOR) || !isVisible(starter)) continue;
+    // Not if it wraps posts already found (then it is a layout column), nor if
+    // one of them already wraps it (then it is represented).
+    if (posts.some((post) => starter.contains(post) || post.contains(starter))) continue;
+    seen.add(starter);
+    posts.push(starter);
+    added = true;
+  }
+  if (added) {
+    posts.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
   }
   return posts;
 }

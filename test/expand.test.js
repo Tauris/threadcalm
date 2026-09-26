@@ -129,7 +129,8 @@ describe('control classification', () => {
     starter.append(body);
     document.body.append(starter);
 
-    expect(closestPost(button)).toBe(null);
+    // A starter is a post even with its action row rendered elsewhere.
+    expect(closestPost(button)).toBe(starter);
     expect(_internals.classify(button)).toBe('truncation');
     expect(newExpander().expandWithin(starter)).toBe(1);
     expect(clicks).toBe(1);

@@ -19,6 +19,7 @@
 import {
   ACTION_ROW_SELECTOR,
   POST_SELECTOR,
+  STARTER_SELECTOR,
   allPosts,
   isVisible,
   normalizeText,
@@ -267,8 +268,6 @@ export function extractPost(article, depth = 0, options = {}) {
   return post;
 }
 
-/** What Engage marks the first post of a conversation with. */
-const STARTER_SELECTOR = '.qaThreadStarter';
 
 /** Indentation difference, in pixels, below which two posts count as level. */
 const INDENT_TOLERANCE = 2;

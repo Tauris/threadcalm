@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.1.1.15
+// @version     1.1.1.19
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.1.1.15
+ * Threadcalm (beta) v1.1.1.19
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -194,8 +194,9 @@
   var ACTION_ROW_SELECTOR = '[data-testid="overflow-set"]';
   var POST_SELECTOR = '[role="article"], article, .qaThreadStarter, .y-fixedGridColumn';
   var SEMANTIC_POST_SELECTOR = '[role="article"], article';
+  var STARTER_SELECTOR = ".qaThreadStarter";
   function looksLikePost(element) {
-    return element.querySelector(ACTION_ROW_SELECTOR) !== null;
+    return element.querySelector(ACTION_ROW_SELECTOR) !== null || element.matches(STARTER_SELECTOR);
   }
   function closestPost(element) {
     if (!(element instanceof HTMLElement)) return null;
@@ -225,7 +226,7 @@
     const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     const bodies = ownOf(post, BODY_WRAPPER_SELECTOR);
     const rows = ownOf(post, ACTION_ROW_SELECTOR);
-    return bodies.some((body) => follows(body, element)) && rows.some((row) => follows(element, row));
+    return bodies.some((body) => follows(body, element)) && (rows.length === 0 || rows.some((row) => follows(element, row)));
   }
   function postContainerFor(actionRow) {
     if (!(actionRow instanceof HTMLElement)) return null;
@@ -248,6 +249,17 @@
       if (!post || seen.has(post) || !isVisible(post)) continue;
       seen.add(post);
       posts.push(post);
+    }
+    let added = false;
+    for (const starter of root.querySelectorAll(STARTER_SELECTOR)) {
+      if (seen.has(starter) || starter.querySelector(ACTION_ROW_SELECTOR) || !isVisible(starter)) continue;
+      if (posts.some((post) => starter.contains(post) || post.contains(starter))) continue;
+      seen.add(starter);
+      posts.push(starter);
+      added = true;
+    }
+    if (added) {
+      posts.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     }
     return posts;
   }
@@ -1526,7 +1538,6 @@
     if (!post.body && replies.length === 0) return null;
     return post;
   }
-  var STARTER_SELECTOR = ".qaThreadStarter";
   var INDENT_TOLERANCE = 2;
   function threadMembers(post) {
     if (!(post instanceof HTMLElement)) return null;
@@ -1969,7 +1980,7 @@
         return isVisible(element) ? "reply-count" : null;
       }
       if (get("expand.truncatedText") && isBodyLinkButton(element)) {
-        if (expandedBodies.has(closestPost(element))) return null;
+        if (expandedBodies.has(element.closest(BODY_WRAPPER_SELECTOR))) return null;
         return isVisible(element) ? "truncation" : null;
       }
       if (texts.length === 0) return null;
@@ -1981,6 +1992,8 @@
       }
       if (get("expand.truncatedText") && active.expandText && texts.some((text) => active.expandText.test(text))) {
         if (!closestPost(element)) return null;
+        const body = element.closest(BODY_WRAPPER_SELECTOR);
+        if (body && expandedBodies.has(body)) return null;
         return isVisible(element) ? "truncation" : null;
       }
       return null;
@@ -2017,8 +2030,8 @@
         if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
         clicked.add(target);
         if (kind === "truncation") {
-          const post = closestPost(target);
-          if (post) expandedBodies.add(post);
+          const body = target.closest(BODY_WRAPPER_SELECTOR);
+          if (body) expandedBodies.add(body);
         }
         try {
           target.click();
@@ -4963,9 +4976,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.1.1.15" : "0.0.0-dev";
+  var VERSION = true ? "1.1.1.19" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "2a5257b" : "dev";
+  var BUILD = true ? "e4c5f03" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
