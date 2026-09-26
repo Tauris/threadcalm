@@ -22,7 +22,7 @@ including the translating.
 
 | | |
 |---|---|
-| **Whole-thread expansion** | Clicks reply counters, reply pagination and truncated post text until the conversation is fully open, then stops. |
+| **Whole-thread expansion** | Clicks reply counters and reply pagination until the conversation is fully open, then stops. Long posts open as you reach them, the way translation works. |
 | **Foreign-language threads, translated** | Switch on automatic translation (<kbd>Shift</kbd>+<kbd>T</kbd>) and every post in a language you do not read is translated as it comes on screen, using Engage's own translation — Japanese, Chinese, Korean and other scripts recognised even when they quote English. Posts you read are left alone, and `Show original` is always one click away. |
 | **Translations you can copy** | Copying a thread translates its foreign posts first, marks each translation as such, and can add the original under it for anyone who wants to check. |
 | **Compact translation controls** | Collapses `Show translation` to a small globe that expands on hover or focus — or hides it entirely on posts already written in a language you read. |

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { allPosts, closestPost, isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
 import { buildMatchers } from '../src/core/i18n.js';
 import * as settings from '../src/core/settings.js';
-import { createExpander } from '../src/features/expand.js';
+import { OPEN_DWELL_MS, createExpander } from '../src/features/expand.js';
 import { threadMembers } from '../src/features/thread.js';
 import { COMPACT_CLASS, TRANSLATE_DWELL_MS, createTranslateTamer } from '../src/features/translate.js';
 import { stubLayout } from './fixtures.js';
@@ -229,5 +229,120 @@ describe('a thread starter without its own action row', () => {
     row.setAttribute('data-testid', 'overflow-set');
     wrapper.append(starter, row);
     expect(allPosts().filter((post) => post === starter)).toHaveLength(0);
+  });
+});
+
+describe('opening long posts as they come on screen', () => {
+  let expander;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    expander?.stop();
+    vi.useRealTimers();
+  });
+
+  /** An expander with a hand-driven IntersectionObserver, after its first scan. */
+  function start() {
+    let notify;
+    const viewer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    const IntersectionObserverImpl = vi.fn((callback) => {
+      notify = callback;
+      return viewer;
+    });
+    expander = createExpander({ matchers, IntersectionObserverImpl });
+    expander.start();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs'));
+    const scroll = (target, onScreen) =>
+      notify([{ target, isIntersecting: onScreen, intersectionRatio: onScreen ? 0.5 : 0 }]);
+    return { viewer, scroll };
+  }
+
+  function longPost() {
+    const { more } = engagePost();
+    const click = vi.fn();
+    more.addEventListener('click', click);
+    return { more, body: more.closest('[class*="contentStateBodyTextWrapper"]'), click };
+  }
+
+  it('waits for the post, rather than opening it on sight', () => {
+    const { body, click } = longPost();
+    const { viewer } = start();
+    expect(viewer.observe).toHaveBeenCalledWith(body);
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('opens it once it has been on screen for a moment', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    vi.advanceTimersByTime(OPEN_DWELL_MS - 1);
+    expect(click).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a post alone that was only scrolled past', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    vi.advanceTimersByTime(OPEN_DWELL_MS / 2);
+    scroll(body, false);
+    vi.advanceTimersByTime(OPEN_DWELL_MS * 10);
+
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing while expansion is paused', () => {
+    const { body, click } = longPost();
+    const { scroll } = start();
+
+    scroll(body, true);
+    expander.pause();
+    vi.advanceTimersByTime(OPEN_DWELL_MS * 10);
+    expect(click).not.toHaveBeenCalled();
+
+    expander.resume();
+    vi.advanceTimersByTime(OPEN_DWELL_MS);
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('still opens everything at once when asked: o, copying, expand everything', () => {
+    const { more, click } = longPost();
+    start();
+    expect(expander.expandWithin(more.closest('.qaThreadStarter'))).toBe(1);
+    expect(click).toHaveBeenCalledTimes(1);
+
+    document.body.innerHTML = '';
+    const other = longPost();
+    expander.rescan();
+    expect(other.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('still clicks reply counters without waiting', () => {
+    const { post } = engagePost({ seeMore: null });
+    const counter = document.createElement('button');
+    counter.textContent = '3 replies';
+    post.append(counter);
+    const click = vi.fn();
+    counter.addEventListener('click', click);
+
+    start();
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases posts Engage removed before they were seen', () => {
+    const { body } = longPost();
+    const { viewer } = start();
+
+    body.closest('[role="main"]').remove();
+    expander.onDomChanged();
+    vi.advanceTimersByTime(settings.get('expand.scanDelayMs'));
+
+    expect(viewer.unobserve).toHaveBeenCalledWith(body);
   });
 });

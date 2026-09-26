@@ -68,8 +68,14 @@ to render, and repeats until three consecutive passes find nothing left to open.
 
 Reply counters are found **without reading their label**: a native button whose own text starts
 with a digit and which carries Engage's reply glyph. That holds in every interface language, so
-expansion works on a tenant whose language has no label pack. Pagination and `See more` are still
-matched by wording.
+expansion works on a tenant whose language has no label pack. `See more` is recognised by its
+place in the post body the same way; only pagination is still matched by wording.
+
+**Long posts open as you reach them.** Replies are opened as soon as they are found, but a
+truncated post is opened only once it has been on screen for a moment — the way automatic
+translation works — so a long feed is not unfolded in the background and the page does not jump
+under you. Posts you scroll past, or never reach, stay as they are. <kbd>o</kbd>, copying a thread
+and *Expand everything on this page now* still open every post they cover at once.
 
 It will not click the three-dot overflow menu. Controls are rejected when they declare
 `aria-haspopup`, when they are already expanded, when they are disabled, when they have no layout

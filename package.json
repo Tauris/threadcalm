@@ -2,7 +2,7 @@
   "name": "threadcalm",
   "version": "1.1.1",
   "//betaBuild": "Bumped for every push to the beta branch. A userscript manager updates on @version alone, so a beta with an unchanged version never reaches the people testing it.",
-  "betaBuild": 19,
+  "betaBuild": 20,
   "description": "A Tampermonkey userscript that makes Microsoft Viva Engage readable: auto-expands whole threads, copies them as Markdown, adds keyboard shortcuts, a reading mode and clutter removal.",
   "type": "module",
   "private": true,

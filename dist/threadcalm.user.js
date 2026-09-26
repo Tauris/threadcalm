@@ -778,7 +778,7 @@
       type: "boolean",
       default: true,
       label: "Expand truncated post text",
-      help: 'Also click "See more" inside a post body.'
+      help: 'Also open "See more" inside a post body — each post once it has been on screen for a moment, so a long feed is not unfolded in the background. The o key and copying open every post they cover at once.'
     },
     {
       key: "expand.maxClicksPerScan",
@@ -1931,7 +1931,8 @@
   var CANDIDATE_SELECTOR = 'button, [role="button"], a, [tabindex="0"], span, div[role="link"]';
   var MAX_LABEL_LENGTH2 = 120;
   var LEADING_DIGIT = new RegExp("^\\p{Nd}", "u");
-  function createExpander({ matchers }) {
+  var OPEN_DWELL_MS = 300;
+  function createExpander({ matchers, IntersectionObserverImpl = globalThis.IntersectionObserver }) {
     let active = matchers;
     let running = true;
     let paused = false;
@@ -1946,6 +1947,10 @@
     let scans = 0;
     let clicked = /* @__PURE__ */ new WeakSet();
     let expandedBodies = /* @__PURE__ */ new WeakSet();
+    let viewer = null;
+    const waiting = /* @__PURE__ */ new Map();
+    const onScreenSince = /* @__PURE__ */ new Map();
+    let openTimer = null;
     function publishState() {
       bus.emit(EVENTS.EXPAND_STATE, {
         enabled: get("expand.enabled"),
@@ -2014,7 +2019,84 @@
       noteScan(examined);
       return found;
     }
-    function clickBatch(root = document) {
+    function viewTarget(control) {
+      return control.closest(BODY_WRAPPER_SELECTOR) ?? closestPost(control) ?? control;
+    }
+    function stopWaiting(target) {
+      viewer?.unobserve(target);
+      waiting.delete(target);
+      onScreenSince.delete(target);
+    }
+    function pruneWaiting() {
+      for (const target of [...waiting.keys()]) if (!target.isConnected) stopWaiting(target);
+    }
+    function clearWaiting() {
+      viewer?.disconnect();
+      viewer = null;
+      waiting.clear();
+      onScreenSince.clear();
+      clearTimeout(openTimer);
+      openTimer = null;
+    }
+    function openWhenSeen(control) {
+      const target = viewTarget(control);
+      if (!viewer) viewer = new IntersectionObserverImpl(onViewed, { threshold: 0 });
+      if (!waiting.has(target)) viewer.observe(target);
+      waiting.set(target, control);
+    }
+    function onViewed(entries) {
+      const now = Date.now();
+      for (const { target, isIntersecting, intersectionRatio } of entries) {
+        if (!waiting.has(target)) continue;
+        if (isIntersecting && intersectionRatio > 0) {
+          if (!onScreenSince.has(target)) onScreenSince.set(target, now);
+        } else {
+          onScreenSince.delete(target);
+        }
+      }
+      scheduleOpen();
+    }
+    function scheduleOpen() {
+      clearTimeout(openTimer);
+      openTimer = null;
+      if (!running || !inScope() || onScreenSince.size === 0) return;
+      const due = Math.min(...onScreenSince.values()) + OPEN_DWELL_MS;
+      openTimer = setTimeout(openSeen, Math.max(0, due - Date.now()));
+    }
+    function openSeen() {
+      openTimer = null;
+      if (!running || !inScope() || !get("expand.truncatedText")) return;
+      const maxTotal = get("expand.maxTotalClicks");
+      const now = Date.now();
+      let clicks = 0;
+      for (const [target, since] of [...onScreenSince]) {
+        if (since + OPEN_DWELL_MS > now) continue;
+        const control = waiting.get(target);
+        stopWaiting(target);
+        if (totalClicks >= maxTotal) break;
+        if (!control?.isConnected || clicked.has(control) || classify(control) !== "truncation") continue;
+        if (clickControl("truncation", control)) clicks += 1;
+      }
+      if (clicks > 0) bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
+      scheduleOpen();
+    }
+    function clickControl(kind, target) {
+      clicked.add(target);
+      if (kind === "truncation") {
+        const body = target.closest(BODY_WRAPPER_SELECTOR);
+        if (body) expandedBodies.add(body);
+      }
+      try {
+        target.click();
+      } catch (error) {
+        log.debug("click failed", error, target);
+        return false;
+      }
+      totalClicks += 1;
+      log.debug(`clicked ${kind}`, target);
+      return true;
+    }
+    function clickBatch(root = document, { deferTruncation = false } = {}) {
       const maxPerScan = get("expand.maxClicksPerScan");
       const maxTotal = get("expand.maxTotalClicks");
       if (totalClicks >= maxTotal) {
@@ -2025,32 +2107,25 @@
         }
         return 0;
       }
+      const defer = deferTruncation && typeof IntersectionObserverImpl === "function";
       let clicks = 0;
       for (const { kind, target } of findControls(root)) {
-        if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
-        clicked.add(target);
-        if (kind === "truncation") {
-          const body = target.closest(BODY_WRAPPER_SELECTOR);
-          if (body) expandedBodies.add(body);
-        }
-        try {
-          target.click();
-        } catch (error) {
-          log.debug("click failed", error, target);
+        if (defer && kind === "truncation") {
+          openWhenSeen(target);
           continue;
         }
-        clicks += 1;
-        totalClicks += 1;
-        log.debug(`clicked ${kind}`, target);
+        if (clicks >= maxPerScan || totalClicks >= maxTotal) break;
+        if (clickControl(kind, target)) clicks += 1;
       }
       return clicks;
     }
-    function scan() {
+    function scan({ deferTruncation = true } = {}) {
       scanTimer = null;
       if (!running || !inScope()) return;
       dirty = false;
       scans += 1;
-      const clicks = clickBatch();
+      pruneWaiting();
+      const clicks = clickBatch(document, { deferTruncation });
       if (clicks > 0) {
         quietPasses = 0;
         bus.emit(EVENTS.EXPAND_PROGRESS, { totalClicks, clicks, settled: false });
@@ -2065,7 +2140,7 @@
     }
     function schedule() {
       if (!running || scanTimer || !inScope()) return;
-      scanTimer = setTimeout(scan, get("expand.scanDelayMs"));
+      scanTimer = setTimeout(() => scan(), get("expand.scanDelayMs"));
     }
     const IDLE_BEAT_INTERVAL = 10;
     function beat() {
@@ -2095,6 +2170,7 @@
       idleBeats = 0;
       clicked = /* @__PURE__ */ new WeakSet();
       expandedBodies = /* @__PURE__ */ new WeakSet();
+      clearWaiting();
       publishState();
     }
     return {
@@ -2110,6 +2186,7 @@
         clearTimeout(settleTimer);
         clearInterval(heartbeat);
         scanTimer = settleTimer = heartbeat = null;
+        clearWaiting();
       },
       /** Called by the SPA watcher; a new route means new counters. */
       onNavigate() {
@@ -2135,21 +2212,24 @@
         schedule();
       },
       /** Forgets the click history and runs a fresh pass immediately. */
+      /** "Expand everything on this page": opens every post, seen or not. */
       rescan() {
         reset2();
-        scan();
+        scan({ deferTruncation: false });
       },
       pause() {
         paused = true;
         clearTimeout(scanTimer);
         clearTimeout(settleTimer);
-        scanTimer = settleTimer = null;
+        clearTimeout(openTimer);
+        scanTimer = settleTimer = openTimer = null;
         publishState();
       },
       resume() {
         paused = false;
         publishState();
         schedule();
+        scheduleOpen();
       },
       togglePause() {
         if (paused) this.resume();
@@ -2157,7 +2237,10 @@
         return paused;
       },
       isPaused: () => paused,
-      /** Expands one subtree only — used by the "expand this post" shortcut. */
+      /**
+       * Expands one subtree only, "see more" included whether on screen or not
+       * -- used by the o key and before copying.
+       */
       expandWithin(root) {
         return clickBatch(root);
       },
@@ -4978,7 +5061,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   // src/main.js
   var VERSION = true ? "1.1.1" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "d039bd5" : "dev";
+  var BUILD = true ? "6c1c5e7" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

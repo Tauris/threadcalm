@@ -95,7 +95,7 @@ export const SCHEMA = [
     type: 'boolean',
     default: true,
     label: 'Expand truncated post text',
-    help: 'Also click "See more" inside a post body.',
+    help: 'Also open "See more" inside a post body — each post once it has been on screen for a moment, so a long feed is not unfolded in the background. The o key and copying open every post they cover at once.',
   },
   {
     key: 'expand.maxClicksPerScan',
