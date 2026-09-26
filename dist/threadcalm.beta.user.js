@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.1.1.19
+// @version     1.1.1.20
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.1.1.19
+ * Threadcalm (beta) v1.1.1.20
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -870,7 +870,7 @@
       type: "boolean",
       default: false,
       label: "Automatic translation",
-      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off."
+      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off."
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -2607,8 +2607,8 @@
     { keys: ["e"], label: "Pause or resume automatic expansion (pausing also stops automatic translation)" },
     { keys: ["a"], label: "Hide the action bars outright, or show them again" },
     { keys: ["r"], label: "Toggle reading mode" },
-    { keys: ["t"], label: "Cycle the translation-control mode" },
-    { keys: ["T"], label: "Switch automatic translation on or off" },
+    { keys: ["t"], label: "Switch automatic translation on or off" },
+    { keys: ["T"], label: "Cycle the translation-control mode" },
     { keys: ["s"], label: "Open settings" },
     { keys: ["p"], label: "Show or hide the status panel" },
     { keys: ["?"], label: "Show this help" },
@@ -2796,10 +2796,10 @@
             readingMode.toggle() ? "Reading mode on — quieter page. r to return to your own settings." : "Reading mode off — your own settings are back."
           );
           break;
-        case "t":
+        case "T":
           cycleTranslateMode();
           break;
-        case "T": {
+        case "t": {
           const on = !get("translate.autoWhenVisible");
           update({ "translate.autoWhenVisible": on });
           toast(on ? "Automatic translation on" : "Automatic translation off");
@@ -5091,9 +5091,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.1.1.19" : "0.0.0-dev";
+  var VERSION = true ? "1.1.1.20" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "da92f5a" : "dev";
+  var BUILD = true ? "b9223c2" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

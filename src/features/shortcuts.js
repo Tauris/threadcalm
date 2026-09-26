@@ -40,8 +40,8 @@ export const BINDINGS = [
   { keys: ['e'], label: 'Pause or resume automatic expansion (pausing also stops automatic translation)' },
   { keys: ['a'], label: 'Hide the action bars outright, or show them again' },
   { keys: ['r'], label: 'Toggle reading mode' },
-  { keys: ['t'], label: 'Cycle the translation-control mode' },
-  { keys: ['T'], label: 'Switch automatic translation on or off' },
+  { keys: ['t'], label: 'Switch automatic translation on or off' },
+  { keys: ['T'], label: 'Cycle the translation-control mode' },
   { keys: ['s'], label: 'Open settings' },
   { keys: ['p'], label: 'Show or hide the status panel' },
   { keys: ['?'], label: 'Show this help' },
@@ -271,10 +271,10 @@ export function createShortcuts({ expander, copyTools, readingMode, panel, quiet
             : 'Reading mode off \u2014 your own settings are back.',
         );
         break;
-      case 't':
+      case 'T':
         cycleTranslateMode();
         break;
-      case 'T': {
+      case 't': {
         const on = !settings.get('translate.autoWhenVisible');
         // Written as a setting, so switching off reaches the translate feature
         // at once and stops anything still waiting its turn.

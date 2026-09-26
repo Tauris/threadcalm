@@ -16,12 +16,18 @@ The dependable handles, best first:
 | `[role="banner"]` | the global app shell |
 | `[role="main"]` | the conversation/content region |
 | `[data-testid="overflow-set"]` | a post's action row |
+| `<html lang>` | the reader's Engage interface language (`de-de`, `ja-jp`) |
 | `.qaContentMainColumn` | the main content column |
 | `.qaThreadStarter` | the thread-starter post |
 | `.y-fixedGridColumn` | a nested comment or reply |
+| `[class*="contentStateBodyTextWrapper"]` | a post's body text (the class has a generated suffix) |
+| `button > span.y-fakeLink` | Engage's link-styled inline button |
 
 The ARIA landmarks and the test id are meaningful names and are treated as the primary API. The
-three class names are layout artefacts: useful, but only ever accepted alongside a structural check.
+class names are layout artefacts: useful, but only ever accepted alongside a structural check.
+
+`<html lang>` follows the reader's own Engage language setting, independently of the browser's
+languages; checked in six locales. It picks the label pack.
 
 Generated Fluent class names (`fui-Text`, `fui-Button-…`) appear throughout the page and are never
 matched. Neither is the document title, whose leading count is dynamic.
@@ -120,6 +126,10 @@ if the page has any, action rows otherwise. A class-matched candidate counts as 
 also contains an action row — a layout column with no action row inside it is not a post, whatever
 it is called.
 
+The one exception is `.qaThreadStarter`. It names exactly one thing, and on some pages the starter's
+action row is rendered outside it, so it counts as a post by itself. Without that, the first post of
+a thread had no `See more`, no recognised translation control, and was missing from copies.
+
 Where replies are nested inside their parent, consequences that bite:
 
 - "Top-level posts" means containers with no container ancestor — see `rootPosts()`.
@@ -199,16 +209,43 @@ broadly clicks them. Reply, response or comment wording is required for a pagina
 `See more` (post truncation) is accepted with a bare label, but only inside a recognised post
 container. The container is what makes it safe.
 
-Reply pagination also appears as `Show <number> previous comments`. The number and the surrounding
-text are both dynamic and neither is hard-coded.
+Reply pagination also appears as `Show <number> previous comments` and, on a reply's own route,
+`Show <number> more comments`. The number and the surrounding text are both dynamic and neither is
+hard-coded. Pagination has no structural signal distinctive enough to click on, so it remains
+matched by wording.
+
+## Inline link buttons
+
+Engage draws its small text links as real buttons that only look like links:
+
+```html
+<button class="link-…" type="button"><span class="y-fakeLink">see more</span></button>
+```
+
+Where one sits decides what it is, and that held in every interface language checked:
+
+| Position | Control |
+|---|---|
+| inside the post's `contentStateBodyTextWrapper-*` | `See more` — and `See less`, once clicked |
+| after the body, before the action row, in a row of its own | `Show translation`, or `Show original (…)` |
+
+So both are recognised without reading their label. Two guards: a link-styled button that opens
+something — `aria-expanded`, `aria-haspopup` — is excluded, because the collapsed `Write a comment`
+box is one too; and `See more` is clicked at most once per body wrapper, because after the click the
+same button reads `See less` and structure cannot tell them apart.
 
 ## Translation controls
 
-Rendered per post, as a button or link whose whole label is `Show translation` (or the tenant's
-translation of that). `Show original` is the inverse control and is treated separately: it is
-compacted but never hidden, because hiding it would leave a reader stuck in a translation.
+Rendered per post, as an [inline link button](#inline-link-buttons) whose label is
+`Show translation` in the interface language. After a click, Engage replaces the post body with the
+translation **in place** — the original is not kept anywhere in the page, hidden or not — and the
+control becomes `Show original (Japanese)`: the source language, in the interface language, in
+brackets. In Arabic the brackets were observed empty. The bracket is what marks the translated
+state in any language.
 
-Both are handled by adding a class, never by touching the node.
+`Show original` is never compacted and never hidden: it is the way back, and the only sign that the
+text is not the author's own. The compacting itself is done by adding a class, never by touching
+the node.
 
 ## Keeping the page usable
 
@@ -234,12 +271,16 @@ parameters, so the output is safe to paste into an issue. Keep it that way if yo
 - A redesigned reply glyph stops structural detection dead in every locale at once. The symptom is
   that nothing expands anywhere; the fix is one line in *Advanced → Reply icon signatures*, and the
   label packs still cover the languages they cover.
+- Renaming `span.y-fakeLink` or the body wrapper's class stops the structural recognition of
+  `See more` and the translation control. The label packs still cover Engage's languages, so the
+  symptom is a reworded label no longer being found, not a wrong click.
 - A layout with neither semantic containers nor `[data-testid="overflow-set"]` yields no posts at
   all, which disables extraction, copying, highlighting and the in-post guard for `See more`.
   Expansion by reply counter would survive. The script warns once on the console when a page
   resolves zero posts, rather than letting half the features quietly do nothing.
-- A tenant whose UI language has no label pack finds nothing. Symptom: the script loads, reports
-  ready, and never clicks. Fix: add the language, or add patterns under *Advanced*.
+- An interface language Engage adds later has no label pack. Reply counters, `See more` and the
+  translation control still work by structure; reply pagination and sponsored cards do not. The
+  script says so once, and *Copy layout diagnostics* shows the page language.
 - Virtualised feeds recycle nodes. Anything holding a DOM reference across a mutation is a bug;
   `WeakSet` membership and positional indices are used instead.
 - Reply pagination inside a *deeply* nested sub-thread may need more than one pass. The settle loop

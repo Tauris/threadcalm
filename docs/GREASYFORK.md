@@ -8,9 +8,12 @@ shortcuts the web app never had.
 
 ## What it does
 
-- **Opens whole threads.** Clicks reply counters, "show previous comments" and "see more"
-  until the conversation is fully open &mdash; then stops. It never clicks menus.
-- **Reads foreign-language threads for you.** Switch on automatic translation (`Shift+T`) and
+- **Opens whole threads.** Clicks reply counters and "show previous comments" until the
+  conversation is fully open &mdash; then stops. Long posts open as you reach them. It never
+  clicks menus.
+- **Overview for skimming.** Press `v` and feeds stay compact, so you see many posts at a glance;
+  `o` opens the one you are on.
+- **Reads foreign-language threads for you.** Switch on automatic translation (`t`) and
   every post in a language you do not read is translated as it comes on screen, with Engage's own
   translation. Posts you read are left alone; `Show original` is always one click away. Japanese,
   Chinese, Korean and other scripts are recognised even when a post quotes English.
@@ -32,7 +35,7 @@ else waits until you switch it on.
 ## Keyboard
 
 `j` / `k` next and previous post &middot; `c` copy the thread &middot; `y` copy its link &middot; `o` expand &middot; `v` overview &middot;
-`e` pause expansion &middot; `Shift+T` automatic translation &middot; `a` hide the action bars &middot; `r` reading mode &middot; `s` settings &middot; `?` all shortcuts
+`e` pause expansion &middot; `t` automatic translation &middot; `a` hide the action bars &middot; `r` reading mode &middot; `s` settings &middot; `?` all shortcuts
 
 ## Privacy
 

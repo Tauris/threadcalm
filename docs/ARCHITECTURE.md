@@ -9,15 +9,20 @@ Content appears and disappears under virtualisation.
 
 Three rules fall out of that, and every module obeys them:
 
-1. **Match on what the UI says, not on how it is built.** Visible text, `aria-label`, `title`,
-   `data-testid` — never a class name. This is why labels are data in
-   [`src/core/i18n.js`](../src/core/i18n.js).
+1. **Match on what stays the same in every language, and never on generated build output.**
+   ARIA roles and states, `data-testid`, and what the UI says — which is why labels are data in
+   [`src/core/i18n.js`](../src/core/i18n.js) — but never a generated class name such as
+   `fui-Button-…` or `link-170`.
 
-   There is exactly one deliberate exception: the reply counter is found by the inline glyph it
-   carries, because that glyph is the same in every interface language and its wording is not. It
-   buys expansion in locales no label pack covers, and it is fenced — the signature is a setting,
-   and a stale one degrades to "no match" rather than to a wrong click. See
-   [DOM-NOTES.md](DOM-NOTES.md#the-reply-glyph).
+   A few structural signals are used deliberately, because wording differs across Engage's 36
+   interface languages and structure does not. Each is paired with a position check, and each fails
+   towards "no match" rather than a wrong click:
+
+   - the reply counter's inline glyph ([DOM-NOTES.md](DOM-NOTES.md#the-reply-glyph));
+   - Engage's link-styled button, `button > span.y-fakeLink`: inside the post body it is
+     `See more`, between the body and the action row it is the translation control
+     ([DOM-NOTES.md](DOM-NOTES.md#inline-link-buttons));
+   - `.qaThreadStarter`, which marks exactly one thing and so counts as a post on its own.
 2. **Never mutate Engage's DOM.** Features add a class or a data attribute and let CSS do the rest.
    A React re-render discards anything injected into a component's subtree, and rewriting nodes
    React owns can throw. The one exception is the copy chip, which is appended as an extra last
@@ -56,16 +61,16 @@ src/
     bus.js             tiny synchronous event bus (NAVIGATE, DOM_CHANGED, SETTINGS_CHANGED, …)
     dom.js             text extraction, visibility, nearest clickable ancestor, post containers
     gm.js              GM_* wrappers, each with a working fallback
-    i18n.js            label packs -> compiled matchers
-    language.js        stop-word language guesser
+    i18n.js            label packs for Engage's 36 languages -> compiled matchers; page language
+    language.js        language guesser: writing systems first, then stop words
     logger.js          namespaced console output, quiet by default
     settings.js        schema, defaults, coercion, persistence, change events
     spa.js             History patching + MutationObserver -> navigation and DOM events
   features/
-    expand.js          the thread expander
-    translate.js       compacting/hiding "Show translation"
+    expand.js          the thread expander, long posts on screen, overview
+    translate.js       the translation control: compacting, automatic translation, for copies
     thread.js          reading a conversation out of the DOM, rendering it
-    copy.js            clipboard actions and the per-post chip
+    copy.js            clipboard actions, translation marks, the per-post chip
     declutter.js       hiding promoted/suggested cards
     highlight.js       unanswered and not-seen-before markers
     reading.js         reading mode
@@ -104,6 +109,7 @@ MutationObserver (debounced 250 ms) ─────┴─> bus DOM_CHANGED ─> 
 settings.update() ─> bus SETTINGS_CHANGED ─> matchers rebuilt if needed ─> onSettingsChanged
 
 expand.js ─> bus EXPAND_PROGRESS / EXPAND_STATE ─> panel
+                                  EXPAND_STATE ─> translate.js (pausing switches translation off)
 any feature ─> bus TOAST ─> toast.js
 ```
 
@@ -125,6 +131,21 @@ so a listener that throws cannot take down the emitter or its siblings.
 A heartbeat (default 1 s) re-triggers scanning for content the `MutationObserver` misses — lazily
 rendered replies, in particular, sometimes arrive without a mutation the observer reports usefully.
 
+### Long posts, and overview
+
+Truncated text is the exception to "click what you find". An automatic scan hands each `See more` to
+an `IntersectionObserver` on the post body instead, and clicks it once the body has been on screen
+for `OPEN_DWELL_MS` (300 ms). A long feed is therefore not unfolded in the background. Structurally,
+`See more` and `See less` are the same button, so each body wrapper is opened at most once.
+
+Explicit requests do not wait: `expandWithin()` (the <kbd>o</kbd> key, copying) and `rescan()`
+(*Expand everything*) click every control they cover.
+
+**Overview** (`expand.overview`, the <kbd>v</kbd> key) makes `inScope()` false on feeds, so no
+automatic scan runs there at all; a single-conversation route is always in scope. It is a reading
+preference and persists. Pausing (<kbd>e</kbd>) is different: session-only, it stops every click,
+and the translate feature listens for it and switches automatic translation off too.
+
 `WeakSet` membership, not a selector, is what prevents re-clicking: labels repeat freely across a
 feed, but a given node only ever needs opening once, and detached nodes become collectable after a
 re-render. Counters and the click history reset on navigation.
@@ -139,15 +160,39 @@ and falls back to the element itself, so the script survives either shape.
 ### What is deliberately not matched
 
 A bare `Show more` is not accepted as reply pagination: it also names unrelated controls, so reply,
-response or comment wording is required. `See more` is accepted with a bare label, but only inside a
-recognised post container — the container is what makes the loose label safe. Anything with
+response or comment wording is required. `See more` is accepted with a bare label, or with none, but
+only inside a recognised post — by wording, inside a post container; by structure, inside the post's
+body wrapper. The container is what makes the loose label safe. Anything with
 `aria-haspopup`, `aria-expanded="true"`, or a label matching the menu patterns is rejected outright;
 opening the overflow menu on every post in a feed is the failure mode the matching is tuned against.
 
+## Automatic translation
+
+`translate.js` never translates anything itself: it presses Engage's own `Show translation`, so the
+script still makes no requests. The rules are about *when*:
+
+- **On screen.** Each eligible post is observed, not its control — the control sits at the bottom,
+  and a long post is on screen well before it. A post is translated after `TRANSLATE_DWELL_MS`
+  (500 ms) in view; one scrolled past is dropped from the queue.
+- **One at a time,** `TRANSLATE_SPACING_MS` (400 ms) apart, because each click is a request to the
+  translation service.
+- **Once per post.** A post the reader turned back with `Show original` is not translated again,
+  even when Engage renders a fresh control.
+- **Stops at once** when switched off, or when expansion is paused.
+
+Engage replaces the body in place and keeps no copy of the original, so the original is captured
+just before a translation: by the feature before its own click, and by a capture-phase `click`
+listener on the document for the reader's clicks — capture runs before React's own handlers, while
+the text is still the original. `translationOf(post)` then reports the source language, read from
+the bracket in `Show original (Japanese)`, and the captured text.
+
+Copying is the one exception to "on screen": `translateForCopy()` works through every eligible post
+of the thread before it is read, under the same rules otherwise, and at most 40 per copy.
+
 ## Language detection
 
-The "hide the translate control on posts I can already read" feature needs to know what language a
-post is in. Three options, one chosen:
+Deciding whether a post needs translating — to hide its control, or to translate it automatically —
+means knowing what language it is in. Three options, one chosen:
 
 | Approach | Verdict |
 |---|---|
@@ -155,10 +200,18 @@ post is in. Three options, one chosen:
 | A bundled n-gram model (franc, CLD3) | Rejected. Tens to hundreds of kilobytes in a file people are expected to read before installing, for a decision that only hides a button. |
 | Stop-word frequency | Chosen. About 1 kB of word lists, one pass over the post text, no dependencies. |
 
-The trade-off is that it is reliable on a paragraph of prose and unreliable on a six-word post. So
-[`language.js`](../src/core/language.js) returns a confidence score and the feature refuses to hide
-anything below a configurable floor: a missing translate button on a post the reader cannot read is
-a worse failure than a visible one they do not need.
+Japanese, Chinese, Korean, Greek, Thai, Armenian and Georgian are recognised by their writing system
+first, and that takes precedence: a Japanese post quoting English is a Japanese post. It takes about
+a sentence of the script, so one borrowed word does not count. Text in Chinese characters alone is
+reported as ambiguous between Chinese and Japanese.
+
+The trade-off is that stop words are reliable on a paragraph of prose and unreliable on a six-word
+post. So [`language.js`](../src/core/language.js) returns a confidence score, and nothing is hidden
+or translated below a configurable floor: a missing translate button on a post the reader cannot
+read is a worse failure than a visible one they do not need.
+
+The *interface* language is a different question, answered by the page: Engage writes the reader's
+own language setting into `<html lang>`, and the matching label pack is used without asking.
 
 ## Settings
 
@@ -181,7 +234,10 @@ fails if the committed file differs, which is what keeps CI honest.
 
 Vitest with jsdom. Fixtures in [`test/fixtures.js`](../test/fixtures.js) reproduce the *structure*
 the script relies on — both post shapes described in [DOM-NOTES.md](DOM-NOTES.md), a counter
-rendered as a bare span, a translate control — and nothing else. The fixtures are synthetic by
+rendered as a bare span, a translate control — and nothing else.
+[`test/structure.test.js`](../test/structure.test.js) builds Engage's post shape with labels in no
+known language, so it can only pass on structure. Visibility is driven by a hand-held
+`IntersectionObserver` passed in as a factory argument, since jsdom has none. The fixtures are synthetic by
 design: copying markup out of a running tenant would bake in class names the script must never
 depend on, and would put other people's names and post text into a public repository.
 

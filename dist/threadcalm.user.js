@@ -870,7 +870,7 @@
       type: "boolean",
       default: false,
       label: "Automatic translation",
-      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off."
+      help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off."
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -2607,8 +2607,8 @@
     { keys: ["e"], label: "Pause or resume automatic expansion (pausing also stops automatic translation)" },
     { keys: ["a"], label: "Hide the action bars outright, or show them again" },
     { keys: ["r"], label: "Toggle reading mode" },
-    { keys: ["t"], label: "Cycle the translation-control mode" },
-    { keys: ["T"], label: "Switch automatic translation on or off" },
+    { keys: ["t"], label: "Switch automatic translation on or off" },
+    { keys: ["T"], label: "Cycle the translation-control mode" },
     { keys: ["s"], label: "Open settings" },
     { keys: ["p"], label: "Show or hide the status panel" },
     { keys: ["?"], label: "Show this help" },
@@ -2796,10 +2796,10 @@
             readingMode.toggle() ? "Reading mode on — quieter page. r to return to your own settings." : "Reading mode off — your own settings are back."
           );
           break;
-        case "t":
+        case "T":
           cycleTranslateMode();
           break;
-        case "T": {
+        case "t": {
           const on = !get("translate.autoWhenVisible");
           update({ "translate.autoWhenVisible": on });
           toast(on ? "Automatic translation on" : "Automatic translation off");
@@ -5093,7 +5093,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   // src/main.js
   var VERSION = true ? "1.1.1" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "6121f8b" : "dev";
+  var BUILD = true ? "8921ab1" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",

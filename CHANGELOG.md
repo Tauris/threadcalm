@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Overview, on <kbd>v</kbd>, for skimming.** While it is on, nothing on a feed opens by itself —
+  neither replies nor long posts — so a feed stays compact. <kbd>o</kbd> opens the post you are on,
+  copying and *Expand everything* still open what they cover, a single conversation still opens in
+  full, and translation carries on. Remembered, with an *Overview* pill in the panel. Unlike
+  <kbd>e</kbd>, it is not an emergency stop.
+
+### Changed
+
+- **<kbd>t</kbd> now switches automatic translation, and <kbd>Shift</kbd>+<kbd>T</kbd> cycles the
+  translation-control mode** — the other way round from 1.1.0. Switching translation is the one
+  used often.
+- **Long posts open as you reach them.** `See more` is clicked once a post has been on screen for
+  300 ms, the way automatic translation works, instead of on every long post on the page. Posts you
+  scroll past or never reach stay as they are. <kbd>o</kbd>, copying and *Expand everything* still
+  open every post they cover at once.
+- **A thread's first post counts as a post even when its action row is rendered outside it.** On
+  such pages its `See more`, its translation control, automatic translation and thread copying
+  now work.
+
+### Fixed
+
+- The first post of a thread did not open its `See more` on some pages.
+- After one `See more` had been opened, other long posts sharing the same container stayed
+  collapsed.
+
 ## [1.1.1] - 2026-09-26
 
 ### Changed

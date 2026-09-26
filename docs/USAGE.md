@@ -50,8 +50,8 @@ per-page click limit has been reached.
 | <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Reading mode on or off |
-| <kbd>t</kbd> | Cycle the translation-control mode |
-| <kbd>Shift</kbd>+<kbd>T</kbd> | Switch automatic translation on or off |
+| <kbd>t</kbd> | Switch automatic translation on or off |
+| <kbd>Shift</kbd>+<kbd>T</kbd> | Cycle the translation-control mode |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>s</kbd> | Open settings |
 | <kbd>?</kbd> | Show the shortcut list |
@@ -106,7 +106,7 @@ worth reporting.
 ## Translation controls
 
 In a multilingual tenant Engage puts a `Show translation` control under nearly every post, which is
-the noisiest chrome on the page. Four modes, cycled with <kbd>t</kbd>:
+the noisiest chrome on the page. Four modes, cycled with <kbd>Shift</kbd>+<kbd>T</kbd>:
 
 | Mode | Behaviour |
 |---|---|
@@ -122,11 +122,11 @@ is not what the author wrote.
 ### Automatic translation
 
 Off by default. Switch on **Automatic translation** — in the settings, or with
-<kbd>Shift</kbd>+<kbd>T</kbd> — and Threadcalm presses Engage's own
+<kbd>t</kbd> — and Threadcalm presses Engage's own
 `Show translation` for you, once per post, when the post is on your screen — and only when it is
 confidently in a language that is not on your **Languages I read** list.
 
-- **Off means off, at once.** <kbd>Shift</kbd>+<kbd>T</kbd> again, or unticking the setting, stops
+- **Off means off, at once.** <kbd>t</kbd> again, or unticking the setting, stops
   it immediately, including posts already waiting their turn. Posts it has translated stay
   translated; `Show original` takes each one back.
 - **Pausing expansion switches it off too.** <kbd>e</kbd>, the panel's pause button or the
@@ -337,7 +337,7 @@ back to its original, one at a time. A toast counts them off ("Translating 3 of 
 
 - A post Engage does not translate within a few seconds is copied as written.
 - At most 40 posts are translated per copy; the rest are copied as written, and the toast says so.
-- <kbd>Shift</kbd>+<kbd>T</kbd> or pausing expansion stops it between posts, and what is there is copied.
+- <kbd>t</kbd> or pausing expansion stops it between posts, and what is there is copied.
 - The posts stay translated on the page afterwards.
 
 With automatic translation off, <kbd>c</kbd> copies what the page shows and translates nothing.

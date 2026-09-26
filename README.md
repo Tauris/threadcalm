@@ -23,11 +23,12 @@ including the translating.
 | | |
 |---|---|
 | **Whole-thread expansion** | Clicks reply counters and reply pagination until the conversation is fully open, then stops. Long posts open as you reach them, the way translation works. |
-| **Foreign-language threads, translated** | Switch on automatic translation (<kbd>Shift</kbd>+<kbd>T</kbd>) and every post in a language you do not read is translated as it comes on screen, using Engage's own translation — Japanese, Chinese, Korean and other scripts recognised even when they quote English. Posts you read are left alone, and `Show original` is always one click away. |
+| **Overview for skimming** | Press <kbd>v</kbd> and feeds stay compact — no replies or long posts open by themselves — so you see many posts at a glance. <kbd>o</kbd> opens the one you are on; a single conversation still opens in full. |
+| **Foreign-language threads, translated** | Switch on automatic translation (<kbd>t</kbd>) and every post in a language you do not read is translated as it comes on screen, using Engage's own translation — Japanese, Chinese, Korean and other scripts recognised even when they quote English. Posts you read are left alone, and `Show original` is always one click away. |
 | **Translations you can copy** | Copying a thread translates its foreign posts first, marks each translation as such, and can add the original under it for anyone who wants to check. |
 | **Compact translation controls** | Collapses `Show translation` to a small globe that expands on hover or focus — or hides it entirely on posts already written in a language you read. |
 | **Copy as Markdown** | Copies a thread, replies nested as blockquotes, with authors, timestamps and a permalink. Plain text too. |
-| **Keyboard shortcuts** | `j`/`k` to move between posts, `c` to copy, `o` to expand, `?` for the list. |
+| **Keyboard shortcuts** | `j`/`k` to move between posts, `o` to expand, `c` to copy, `v` for an overview, `t` for automatic translation, `r` for reading mode, `?` for the list. |
 | **Reading mode** | One key for a quiet page: the action bar as a corner cluster, comment boxes and copy buttons out of sight, translate controls as an icon, promoted cards and the app bar gone. The same key hands your own settings back. |
 | **Quiet post chrome** | Optionally quiets the Like / Comment / Share bar and the inline comment and reply pills. Six modes for the bar, each trading space against movement against how much of the post is covered. Off by default. |
 | **Clutter removal** | Hides cards labelled sponsored, promoted or suggested. |
@@ -65,8 +66,8 @@ live behind its **Settings** button, and the script also registers commands in t
 | <kbd>e</kbd> | Pause or resume automatic expansion (pausing also switches automatic translation off) |
 | <kbd>a</kbd> | Hide the action bars outright, or show them again |
 | <kbd>r</kbd> | Reading mode on or off |
-| <kbd>t</kbd> | Cycle the translation-control mode |
-| <kbd>Shift</kbd>+<kbd>T</kbd> | Switch automatic translation on or off |
+| <kbd>t</kbd> | Switch automatic translation on or off |
+| <kbd>Shift</kbd>+<kbd>T</kbd> | Cycle the translation-control mode |
 | <kbd>s</kbd> | Open settings |
 | <kbd>p</kbd> | Show or hide the status panel |
 | <kbd>?</kbd> | Show the shortcut list |
@@ -77,7 +78,7 @@ press <kbd>?</kbd> or use the **?** button in the panel.
 
 ### Reading threads in other languages
 
-Switch on **automatic translation** — <kbd>Shift</kbd>+<kbd>T</kbd>, or in the settings — and a
+Switch on **automatic translation** — <kbd>t</kbd>, or in the settings — and a
 thread in half a dozen languages reads as one. As you scroll, each post that is confidently in a
 language you do not read is translated with Engage's own `Show translation`, once, after it has
 been on screen for half a second.
@@ -89,7 +90,7 @@ been on screen for half a second.
 - **Only what you look at.** Posts you scroll past, or never reach, are not translated.
 - **Always reversible.** `Show original (Japanese)` stays visible under every translated post, and a
   post you turn back stays in its original.
-- **Easy to stop.** <kbd>Shift</kbd>+<kbd>T</kbd> again, or pausing expansion with <kbd>e</kbd>,
+- **Easy to stop.** <kbd>t</kbd> again, or pausing expansion with <kbd>e</kbd>,
   stops it at once.
 - **In copies too.** <kbd>c</kbd> translates the thread's foreign posts first — including those off
   screen — and marks each one: *Translated from Japanese by Engage.* The original can be included
@@ -101,7 +102,7 @@ by default. See the [guide](docs/USAGE.md#automatic-translation).
 ### Translation controls
 
 `Show translation` under every post is the noisiest thing in a multilingual tenant. Four modes,
-switchable with <kbd>t</kbd>:
+switchable with <kbd>Shift</kbd>+<kbd>T</kbd>:
 
 - **Compact** (default) — the label collapses to a small globe and expands again on hover or
   keyboard focus. The control keeps its role, its handler and its place in the tab order.

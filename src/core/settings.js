@@ -188,7 +188,7 @@ export const SCHEMA = [
     type: 'boolean',
     default: false,
     label: 'Automatic translation',
-    help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Shift+T switches it; pausing expansion switches it off.',
+    help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off.',
   },
 
   // -- Post chrome ---------------------------------------------------------
