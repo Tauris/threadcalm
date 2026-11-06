@@ -10,10 +10,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **When videos play**, in a new *Videos* settings group. Engage starts videos, muted, as they scroll
-  into view, and the default leaves that alone. *Only when I start them* pauses a video that starts
-  by itself; one you clicked, or started from the keyboard, plays as usual. An embedded player has
-  `autoplay` removed from its frame's `allow` attribute, and reloads once. The layout diagnostics now
-  report `video` elements, embedded frames, frames that may autoplay, and videos and frames held.
+  into view, and the default leaves that alone. *Only when I click them* saves data: Engage's video
+  player is not loaded until you click **Play video**. A plain video in the page that starts by itself
+  is paused. The layout diagnostics now report `video` elements, embedded frames, frames that may
+  autoplay, players waiting for a click, and videos and players held.
 
 ## [1.2.0] - 2026-09-26
 

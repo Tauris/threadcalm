@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.2.0.22
+// @version     1.2.0.23
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.2.0.22
+ * Threadcalm (beta) v1.2.0.23
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -103,8 +103,8 @@
     sweeps: 0,
     /** Videos paused because they started without being asked to. */
     autoplaysHeld: 0,
-    /** Embedded frames whose allow attribute had "autoplay" removed. */
-    autoplayFramesHeld: 0
+    /** Embedded players kept from loading until clicked. */
+    playersNotLoaded: 0
   };
   var startedAt = Date.now();
   var lastScanAt = 0;
@@ -892,9 +892,9 @@
         },
         {
           value: "manual",
-          label: "Only when I start them",
-          gain: "nothing moves on the page until you press play",
-          cost: "one more click to watch; embedded players reload once as they appear"
+          label: "Only when I click them",
+          gain: "saves data: a video loads only when you click it, and nothing moves until then",
+          cost: "one more click to watch, and no preview picture"
         }
       ]
     },
@@ -1271,7 +1271,7 @@
   var started = false;
   var lastUrl = "";
   var OWN_UI_SELECTOR = "#tc-panel, #tc-toasts, #tc-settings, #tc-help";
-  var OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip`;
+  var OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip, .tc-video-hold`;
   function elementOf(node2) {
     if (!node2) return null;
     return node2.nodeType === 1 ? node2 : node2.parentElement;
@@ -3215,21 +3215,29 @@
 
   // src/features/video.js
   var GESTURE_WINDOW_MS = 2e3;
+  var MAX_HOLDS = 3;
   var ACTIVATING_KEYS = /* @__PURE__ */ new Set(["Enter", " "]);
-  var isAutoplayEntry = (entry) => /^\s*autoplay(\s|$)/i.test(entry);
-  function withoutAutoplay(allow) {
-    return allow.split(";").filter((entry) => !isAutoplayEntry(entry)).join(";").trim();
-  }
-  function reloadFrame(frame) {
-    const src = frame.getAttribute("src");
-    if (src) frame.setAttribute("src", src);
+  var PLACEHOLDER_CLASS = "tc-video-hold";
+  var HELD_FRAME_CLASS = "tc-video-frame-held";
+  var HOST_CLASS2 = "tc-video-host";
+  function isVideoPlayerFrame(frame) {
+    const allowsAutoplay = (frame.getAttribute("allow") ?? "").split(";").some((entry) => /^\s*autoplay(\s|$)/i.test(entry));
+    if (!allowsAutoplay) return false;
+    try {
+      const { hostname } = new URL(frame.getAttribute("src") ?? "", document.baseURI);
+      return /\.sharepoint\.com$/i.test(hostname);
+    } catch {
+      return false;
+    }
   }
   function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}) {
     let listening = false;
     let lastGesture = null;
     let frameObserver = null;
-    const changedFrames = /* @__PURE__ */ new WeakMap();
     const started2 = /* @__PURE__ */ new WeakSet();
+    const heldFrames = /* @__PURE__ */ new WeakMap();
+    const releasedFrames = /* @__PURE__ */ new WeakSet();
+    const frameOfPlaceholder = /* @__PURE__ */ new WeakMap();
     function covers(video, x, y) {
       const rect = video.getBoundingClientRect();
       return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
@@ -3271,48 +3279,117 @@
         target: event.target
       };
     }
+    function clearHold(frame) {
+      const state = heldFrames.get(frame);
+      if (!state) return;
+      state.button.parentElement?.classList.remove(HOST_CLASS2);
+      state.button.remove();
+      frame.classList.remove(HELD_FRAME_CLASS);
+      heldFrames.delete(frame);
+    }
+    function loadFrame(frame) {
+      const { src } = heldFrames.get(frame);
+      releasedFrames.add(frame);
+      clearHold(frame);
+      frame.setAttribute("src", src);
+    }
+    function buildPlaceholder(frame) {
+      const button = el(
+        "button",
+        {
+          type: "button",
+          className: PLACEHOLDER_CLASS,
+          "aria-label": "Play video. Not loaded, to save data.",
+          title: "Threadcalm kept this video from loading. Click to load and play it.",
+          on: {
+            click: (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              loadFrame(frame);
+            }
+          }
+        },
+        icon("play"),
+        el("span", { className: "tc-video-hold-label", text: "Play video" }),
+        el("span", { className: "tc-video-hold-note", text: "Not loaded, to save data" })
+      );
+      frameOfPlaceholder.set(button, frame);
+      return button;
+    }
+    function holdFrame(frame) {
+      if (releasedFrames.has(frame) || !isVideoPlayerFrame(frame)) return;
+      if (frame.closest('[role="dialog"]')) return;
+      const state = heldFrames.get(frame);
+      if (state && state.holds >= MAX_HOLDS) {
+        log.warn("the page keeps reloading an embedded player; leaving it alone");
+        releasedFrames.add(frame);
+        clearHold(frame);
+        return;
+      }
+      const src = frame.getAttribute("src");
+      if (state) {
+        state.src = src;
+        state.holds += 1;
+      } else {
+        const button = buildPlaceholder(frame);
+        heldFrames.set(frame, { src, button, holds: 1 });
+        const host = frame.parentElement;
+        if (host && getComputedStyle(host).position === "static") host.classList.add(HOST_CLASS2);
+        frame.after(button);
+        frame.classList.add(HELD_FRAME_CLASS);
+        counters.playersNotLoaded += 1;
+        log.debug("kept an embedded player from loading");
+      }
+      frame.setAttribute("src", "about:blank");
+    }
+    function holdFramesIn(root) {
+      if (root.tagName === "IFRAME") holdFrame(root);
+      root.querySelectorAll?.("iframe[allow][src]").forEach(holdFrame);
+    }
+    function placeholders() {
+      return [...document.querySelectorAll(`.${PLACEHOLDER_CLASS}`)];
+    }
+    function clearOrphans() {
+      for (const button of placeholders()) {
+        if (!frameOfPlaceholder.get(button)?.isConnected) button.remove();
+      }
+    }
+    function restoreFrames() {
+      for (const button of placeholders()) {
+        const frame = frameOfPlaceholder.get(button);
+        const src = frame && heldFrames.get(frame)?.src;
+        if (!src) continue;
+        clearHold(frame);
+        frame.setAttribute("src", src);
+      }
+    }
     function sweep() {
       for (const video of document.querySelectorAll("video")) {
         if (!video.paused && video.muted && !started2.has(video) && !askedFor(video)) hold(video);
       }
       holdFramesIn(document);
-    }
-    function holdFrame(frame) {
-      const allow = frame.getAttribute("allow");
-      if (!allow || !allow.split(";").some(isAutoplayEntry)) return;
-      if (frame.closest('[role="dialog"]')) return;
-      const first = !changedFrames.has(frame);
-      if (first) changedFrames.set(frame, allow);
-      frame.setAttribute("allow", withoutAutoplay(allow));
-      if (!first) return;
-      reloadFrame(frame);
-      counters.autoplayFramesHeld += 1;
-      log.debug("removed autoplay from an embedded frame");
-    }
-    function holdFramesIn(root) {
-      if (root.tagName === "IFRAME") holdFrame(root);
-      root.querySelectorAll?.("iframe[allow]").forEach(holdFrame);
-    }
-    function restoreFrames() {
-      for (const frame of document.querySelectorAll("iframe")) {
-        const original = changedFrames.get(frame);
-        if (original === void 0) continue;
-        changedFrames.delete(frame);
-        frame.setAttribute("allow", original);
-        reloadFrame(frame);
-      }
+      clearOrphans();
     }
     function listen() {
       if (listening) return;
       listening = true;
       frameObserver = new MutationObserver((records) => {
         for (const record of records) {
+          if (record.type === "attributes") {
+            if (record.target.tagName === "IFRAME") holdFrame(record.target);
+            continue;
+          }
           for (const node2 of record.addedNodes) {
             if (node2.nodeType === 1) holdFramesIn(node2);
           }
         }
       });
-      frameObserver.observe(document.documentElement, { childList: true, subtree: true });
+      frameObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "allow"]
+      });
       document.addEventListener("play", onPlay, true);
       document.addEventListener("playing", onPlay, true);
       window.addEventListener("pointerdown", onPointerDown, true);
@@ -5186,6 +5263,39 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
+/*
+ * A video player kept from loading. The frame stays in place and holds the
+ * space, hidden, and the button covers it. The button sits inside a post, so it
+ * takes its colours from the post rather than from the palette.
+ */
+.tc-video-host { position: relative !important; }
+.tc-video-frame-held { visibility: hidden !important; }
+
+.tc-video-hold {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, .14);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tc-video-hold:hover { background: rgba(128, 128, 128, .24); }
+.tc-video-hold:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.tc-video-hold svg { width: 32px; height: 32px; }
+.tc-video-hold-label { font-weight: 600; }
+.tc-video-hold-note { font-size: .85em; opacity: .75; }
+
 @media (prefers-reduced-motion: reduce) {
   #tc-toasts .tc-toast,
   .tc-translate-compact,
@@ -5254,9 +5364,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.2.0.22" : "0.0.0-dev";
+  var VERSION = true ? "1.2.0.23" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "761b8c3" : "dev";
+  var BUILD = true ? "64f3ac3" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -5388,7 +5498,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"],
     ["video", "video elements"],
     ["iframe", "embedded frames"],
-    ['iframe[allow*="autoplay"]', "frames allowed to autoplay"]
+    ['iframe[allow*="autoplay"]', "frames allowed to autoplay"],
+    [".tc-video-hold", "players waiting for a click"]
   ];
   function activityLines() {
     const stats = snapshot();
@@ -5402,7 +5513,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
       `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
       `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
-      `  ${String(stats.autoplayFramesHeld).padStart(7)}  frames changed to stop autoplay`,
+      `  ${String(stats.playersNotLoaded).padStart(7)}  embedded players kept from loading`,
       `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
       `  ${String(idle === null ? "never" : idle).padStart(7)}  seconds since the last scan`,
       "",

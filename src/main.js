@@ -222,6 +222,7 @@ const HEALTH_SELECTORS = [
   ['video', 'video elements'],
   ['iframe', 'embedded frames'],
   ['iframe[allow*="autoplay"]', 'frames allowed to autoplay'],
+  ['.tc-video-hold', 'players waiting for a click'],
 ];
 
 /**
@@ -253,7 +254,7 @@ function activityLines() {
     `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
     `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
     `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
-    `  ${String(stats.autoplayFramesHeld).padStart(7)}  frames changed to stop autoplay`,
+    `  ${String(stats.playersNotLoaded).padStart(7)}  embedded players kept from loading`,
     `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
     `  ${String(idle === null ? 'never' : idle).padStart(7)}  seconds since the last scan`,
     '',

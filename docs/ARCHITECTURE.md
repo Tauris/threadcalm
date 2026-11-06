@@ -201,12 +201,15 @@ avoid: a trusted click or key press in the last two seconds, on the video's area
 post except the action row. The script's own `.click()` calls are untrusted, so expansion and
 translation never count.
 
-The `<video>` in a cross-origin iframe is out of reach, but the iframe's `allow` attribute is not. A
-dedicated `MutationObserver`, attached only while the setting is on, removes the `autoplay` entry from
-each new frame outside a dialog, keeps the other entries, and reloads the frame by rewriting `src`,
-because `allow` is read only when a frame loads. It reloads a frame once at most, so the page putting
-the value back cannot cause a loop. Turning the setting off restores each original value and reloads
-again. The diagnostics report `video`, `iframe` and autoplay-permitted frame counts.
+Engage's player is a cross-origin SharePoint iframe, so its `<video>` is out of reach. Removing
+`autoplay` from its `allow` attribute was tried on a real page and did not stop it. A dedicated
+`MutationObserver`, attached only while the setting is on, therefore sends each such frame outside a
+dialog to `about:blank` and puts a button after it; clicking restores the address. A frame counts as a
+player when `allow` includes `autoplay` and its host is under `sharepoint.com`. The frame stays in the
+document because React owns it, and is only hidden. If the page puts the address back more than
+`MAX_HOLDS` times the frame is released, since each round loads part of the player. Turning the setting
+off restores every held frame. The diagnostics report `video`, `iframe`, autoplay-permitted and held
+counts.
 
 ## Language detection
 

@@ -207,9 +207,9 @@ export const SCHEMA = [
       },
       {
         value: 'manual',
-        label: 'Only when I start them',
-        gain: 'nothing moves on the page until you press play',
-        cost: 'one more click to watch; embedded players reload once as they appear',
+        label: 'Only when I click them',
+        gain: 'saves data: a video loads only when you click it, and nothing moves until then',
+        cost: 'one more click to watch, and no preview picture',
       },
     ],
   },

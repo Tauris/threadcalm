@@ -173,21 +173,20 @@ Threadcalm leaves it alone by default. Your organisation's admins can switch it 
 | Choice | Gain | Cost |
 |---|---|---|
 | **Let Engage decide** (default) | Engage exactly as it comes | videos start, muted, as you scroll to them |
-| **Only when I start them** | nothing moves on the page until you press play | one more click to watch |
+| **Only when I click them** | saves data: a video loads only when you click it, and nothing moves until then | one more click to watch, and no preview picture |
 
-With *Only when I start them*, a video that starts by itself is paused straight away, and may show
-its first frame or a brief flicker. A video counts as started by you if you clicked it, clicked
-anywhere in its post other than the Like / Comment / Share bar, or pressed Enter or Space on a control
-there, within the last two seconds. A video you started is then left alone, and one in a dialog is
-never held. Threadcalm errs towards letting a video play, so one may occasionally slip through.
+With *Only when I click them*, Engage's SharePoint video player is kept from loading, and a **Play
+video** button takes its place. Clicking it loads the player, which should then start by itself. This
+is the choice that saves data on a slow or metered connection. A small part of the player may still
+be requested in the moment before Threadcalm catches it, and a video in a dialog always loads.
 
-Engage's player usually runs in an embedded frame from another site, which a userscript cannot look
-inside. For those, Threadcalm withdraws the frame's permission to autoplay, which reloads the frame
-once as it appears. Whether the player then stays still is up to the browser and the player.
+A plain video in the page itself is paused if it starts by itself, and may show its first frame or a
+brief flicker. It counts as started by you if you clicked it, clicked anywhere in its post other than
+the Like / Comment / Share bar, or pressed Enter or Space on a control there, within the last two
+seconds. Pausing holds playback, and part of that video may still download.
 
-A video may still download part of itself: this holds playback, not the network. If videos still
-start, *Copy layout diagnostics* shows how many `video` elements and embedded frames the page has, how
-many frames may still autoplay, and how many videos and frames were held.
+If videos still start, *Copy layout diagnostics* shows how many `video` elements and embedded frames
+the page has, how many players are waiting for a click, and how many videos and players were held.
 
 ## Post chrome
 

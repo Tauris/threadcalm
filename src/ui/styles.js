@@ -1355,6 +1355,39 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
+/*
+ * A video player kept from loading. The frame stays in place and holds the
+ * space, hidden, and the button covers it. The button sits inside a post, so it
+ * takes its colours from the post rather than from the palette.
+ */
+.tc-video-host { position: relative !important; }
+.tc-video-frame-held { visibility: hidden !important; }
+
+.tc-video-hold {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, .14);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tc-video-hold:hover { background: rgba(128, 128, 128, .24); }
+.tc-video-hold:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.tc-video-hold svg { width: 32px; height: 32px; }
+.tc-video-hold-label { font-weight: 600; }
+.tc-video-hold-note { font-size: .85em; opacity: .75; }
+
 @media (prefers-reduced-motion: reduce) {
   #tc-toasts .tc-toast,
   .tc-translate-compact,
