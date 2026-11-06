@@ -209,7 +209,7 @@ export const SCHEMA = [
         value: 'manual',
         label: 'Only when I start them',
         gain: 'nothing moves on the page until you press play',
-        cost: 'one more click to watch; a video in an embedded frame cannot be held',
+        cost: 'one more click to watch; embedded players reload once as they appear',
       },
     ],
   },

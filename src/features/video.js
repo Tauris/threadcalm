@@ -6,11 +6,11 @@
  * asked is paused again at once. Off by default: the default is Engage's own
  * behaviour, and with the setting off no listener is even attached.
  *
- * Nothing about Engage's player is assumed beyond its being a <video>: play
- * events are caught on the way down the document, and the only action is
- * pause(). Whatever Engage draws on top keeps working. A video in a cross-origin
- * iframe cannot be reached from here at all; the layout diagnostics count both
- * kinds, so a report can tell which case it is.
+ * A <video> in the page is caught by its play events and paused. Engage's own
+ * player, though, sits in a cross-origin iframe, whose <video> this script cannot
+ * see. What it can change is the frame's allow attribute: the "autoplay" entry is
+ * removed, the others kept, and the frame reloaded once, because a browser reads
+ * allow only when a frame loads. The layout diagnostics count both kinds.
  *
  * The failure to avoid is pausing a video the reader just asked for, so "asked"
  * is read generously. A genuine click or key press in the last moments counts if
@@ -31,9 +31,25 @@ export const GESTURE_WINDOW_MS = 2000;
 /** Keys that activate a focused control. */
 const ACTIVATING_KEYS = new Set(['Enter', ' ']);
 
+const isAutoplayEntry = (entry) => /^\s*autoplay(\s|$)/i.test(entry);
+
+/** An iframe's allow value with "autoplay" removed and its other entries kept. */
+export function withoutAutoplay(allow) {
+  return allow.split(';').filter((entry) => !isAutoplayEntry(entry)).join(';').trim();
+}
+
+/** A browser applies allow only when a frame loads, so a change needs a reload. */
+function reloadFrame(frame) {
+  const src = frame.getAttribute('src');
+  if (src) frame.setAttribute('src', src);
+}
+
 export function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}) {
   let listening = false;
   let lastGesture = null;
+  let frameObserver = null;
+  // Each changed frame's original allow value, to put back when the setting goes off.
+  const changedFrames = new WeakMap();
   // Videos the reader has started. They are left alone from then on, including
   // when Engage resumes one as it scrolls back into view.
   const started = new WeakSet();
@@ -95,11 +111,52 @@ export function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}
     for (const video of document.querySelectorAll('video')) {
       if (!video.paused && video.muted && !started.has(video) && !askedFor(video)) hold(video);
     }
+    holdFramesIn(document);
+  }
+
+  /** Reloads only the first time, so Engage restoring the value cannot cause a reload loop. */
+  function holdFrame(frame) {
+    const allow = frame.getAttribute('allow');
+    if (!allow || !allow.split(';').some(isAutoplayEntry)) return;
+    if (frame.closest('[role="dialog"]')) return;
+
+    const first = !changedFrames.has(frame);
+    if (first) changedFrames.set(frame, allow);
+    frame.setAttribute('allow', withoutAutoplay(allow));
+    if (!first) return;
+    reloadFrame(frame);
+    counters.autoplayFramesHeld += 1;
+    log.debug('removed autoplay from an embedded frame');
+  }
+
+  function holdFramesIn(root) {
+    if (root.tagName === 'IFRAME') holdFrame(root);
+    root.querySelectorAll?.('iframe[allow]').forEach(holdFrame);
+  }
+
+  function restoreFrames() {
+    for (const frame of document.querySelectorAll('iframe')) {
+      const original = changedFrames.get(frame);
+      if (original === undefined) continue;
+      changedFrames.delete(frame);
+      frame.setAttribute('allow', original);
+      reloadFrame(frame);
+    }
   }
 
   function listen() {
     if (listening) return;
     listening = true;
+    // Its own observer rather than onDomChanged, which is debounced: the sooner
+    // a new frame is changed, the less of it has loaded with autoplay allowed.
+    frameObserver = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.nodeType === 1) holdFramesIn(node);
+        }
+      }
+    });
+    frameObserver.observe(document.documentElement, { childList: true, subtree: true });
     // Capture, because media events do not bubble and the player may stop the
     // propagation of its own clicks.
     document.addEventListener('play', onPlay, true);
@@ -111,6 +168,8 @@ export function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}
   function unlisten() {
     if (!listening) return;
     listening = false;
+    frameObserver?.disconnect();
+    frameObserver = null;
     document.removeEventListener('play', onPlay, true);
     document.removeEventListener('playing', onPlay, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
@@ -125,6 +184,7 @@ export function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}
     } else {
       // Nothing is resumed: Engage starts the next video as it normally would.
       unlisten();
+      restoreFrames();
     }
   }
 

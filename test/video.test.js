@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as settings from '../src/core/settings.js';
-import { GESTURE_WINDOW_MS, createVideoGuard } from '../src/features/video.js';
+import { GESTURE_WINDOW_MS, createVideoGuard, withoutAutoplay } from '../src/features/video.js';
 import { createPost, stubLayout } from './fixtures.js';
 
 let guard;
@@ -181,6 +181,104 @@ describe('with videos held', () => {
     const { video } = mountVideo({ paused: false });
     guard.onDomChanged();
     expect(video.pause).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('withoutAutoplay', () => {
+  it('removes autoplay and keeps the other entries', () => {
+    expect(withoutAutoplay('autoplay *; fullscreen *; encrypted-media *'))
+      .toBe('fullscreen *; encrypted-media *');
+    expect(withoutAutoplay('fullscreen *; autoplay *')).toBe('fullscreen *');
+    expect(withoutAutoplay('autoplay *')).toBe('');
+    expect(withoutAutoplay('autoplay')).toBe('');
+  });
+
+  it('leaves an entry alone that only starts with the same letters', () => {
+    expect(withoutAutoplay('autoplay-extra *; fullscreen')).toBe('autoplay-extra *; fullscreen');
+  });
+});
+
+describe('embedded frames', () => {
+  const ALLOW = 'autoplay *; fullscreen *';
+  const SRC = 'https://player.example/embed';
+
+  /** A frame with its src writes counted, since each one is a reload. */
+  function mountFrame({ allow = ALLOW, parent = document.body } = {}) {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('allow', allow);
+    frame.setAttribute('src', SRC);
+    const setAttribute = vi.spyOn(frame, 'setAttribute');
+    parent.append(frame);
+    const reloads = () => setAttribute.mock.calls.filter(([name]) => name === 'src').length;
+    return { frame, reloads };
+  }
+
+  it('leaves frames alone by default', () => {
+    const { frame, reloads } = mountFrame();
+    start();
+    guard.onDomChanged();
+    expect(frame.getAttribute('allow')).toBe(ALLOW);
+    expect(reloads()).toBe(0);
+  });
+
+  describe('with videos held', () => {
+    beforeEach(() => {
+      settings.update({ 'video.autoplay': 'manual' });
+    });
+
+    it('removes autoplay from a frame already there, and reloads it once', () => {
+      const { frame, reloads } = mountFrame();
+      start();
+      expect(frame.getAttribute('allow')).toBe('fullscreen *');
+      expect(frame.getAttribute('src')).toBe(SRC);
+      expect(reloads()).toBe(1);
+    });
+
+    it('catches a frame added later, however deep', async () => {
+      start();
+      const wrapper = document.createElement('div');
+      const { frame, reloads } = mountFrame({ parent: wrapper });
+      document.body.append(wrapper);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(frame.getAttribute('allow')).toBe('fullscreen *');
+      expect(reloads()).toBe(1);
+    });
+
+    it('does not touch a frame without autoplay', () => {
+      const { frame, reloads } = mountFrame({ allow: 'fullscreen *' });
+      start();
+      expect(frame.getAttribute('allow')).toBe('fullscreen *');
+      expect(reloads()).toBe(0);
+    });
+
+    it('leaves a frame in a dialog alone', () => {
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      document.body.append(dialog);
+      const { frame, reloads } = mountFrame({ parent: dialog });
+      start();
+      expect(frame.getAttribute('allow')).toBe(ALLOW);
+      expect(reloads()).toBe(0);
+    });
+
+    it('does not reload again if the page puts autoplay back', () => {
+      const { frame, reloads } = mountFrame();
+      start();
+      frame.setAttribute('allow', ALLOW);
+      guard.onDomChanged();
+      expect(frame.getAttribute('allow')).toBe('fullscreen *');
+      expect(reloads()).toBe(1);
+    });
+
+    it('restores the original value, and reloads, when switched off', () => {
+      const { frame, reloads } = mountFrame();
+      start();
+      settings.update({ 'video.autoplay': 'engage' });
+      guard.onSettingsChanged({ 'video.autoplay': 'engage' });
+      expect(frame.getAttribute('allow')).toBe(ALLOW);
+      expect(reloads()).toBe(2);
+    });
   });
 });
 

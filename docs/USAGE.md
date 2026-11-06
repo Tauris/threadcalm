@@ -181,10 +181,13 @@ anywhere in its post other than the Like / Comment / Share bar, or pressed Enter
 there, within the last two seconds. A video you started is then left alone, and one in a dialog is
 never held. Threadcalm errs towards letting a video play, so one may occasionally slip through.
 
-A video may still download part of itself: this holds playback, not the network. A video in an
-embedded frame from another site cannot be reached by a userscript at all. If videos still start, *Copy
-layout diagnostics* shows how many `video` elements and embedded frames the page has, and how many
-videos were held.
+Engage's player usually runs in an embedded frame from another site, which a userscript cannot look
+inside. For those, Threadcalm withdraws the frame's permission to autoplay, which reloads the frame
+once as it appears. Whether the player then stays still is up to the browser and the player.
+
+A video may still download part of itself: this holds playback, not the network. If videos still
+start, *Copy layout diagnostics* shows how many `video` elements and embedded frames the page has, how
+many frames may still autoplay, and how many videos and frames were held.
 
 ## Post chrome
 

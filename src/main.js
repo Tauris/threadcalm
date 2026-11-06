@@ -221,6 +221,7 @@ const HEALTH_SELECTORS = [
   ['.tc-translate-compact, .tc-translate-hidden', 'translate controls handled'],
   ['video', 'video elements'],
   ['iframe', 'embedded frames'],
+  ['iframe[allow*="autoplay"]', 'frames allowed to autoplay'],
 ];
 
 /**
@@ -252,6 +253,7 @@ function activityLines() {
     `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
     `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
     `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
+    `  ${String(stats.autoplayFramesHeld).padStart(7)}  frames changed to stop autoplay`,
     `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
     `  ${String(idle === null ? 'never' : idle).padStart(7)}  seconds since the last scan`,
     '',

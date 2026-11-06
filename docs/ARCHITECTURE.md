@@ -194,14 +194,19 @@ of the thread before it is read, under the same rules otherwise, and at most 40 
 
 With `video.autoplay` left at its default, `video.js` attaches no listener at all. Set to `manual`, it
 catches `play` and `playing` in the capture phase on the document, since media events do not bubble,
-and calls `pause()` on a video nobody asked for. It assumes nothing about Engage's player beyond a
-`<video>`, and it never touches the player's DOM.
+and calls `pause()` on a video nobody asked for.
 
 "Asked for" is read generously, because pausing a video the reader just started is the failure to
 avoid: a trusted click or key press in the last two seconds, on the video's area or anywhere in its
 post except the action row. The script's own `.click()` calls are untrusted, so expansion and
-translation never count. A cross-origin iframe is out of reach, which is why the diagnostics report
-`video` and `iframe` counts.
+translation never count.
+
+The `<video>` in a cross-origin iframe is out of reach, but the iframe's `allow` attribute is not. A
+dedicated `MutationObserver`, attached only while the setting is on, removes the `autoplay` entry from
+each new frame outside a dialog, keeps the other entries, and reloads the frame by rewriting `src`,
+because `allow` is read only when a frame loads. It reloads a frame once at most, so the page putting
+the value back cannot cause a loop. Turning the setting off restores each original value and reloads
+again. The diagnostics report `video`, `iframe` and autoplay-permitted frame counts.
 
 ## Language detection
 

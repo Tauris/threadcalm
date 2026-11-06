@@ -102,7 +102,9 @@
     /** Feature sweeps, triggered by a reported DOM change or navigation. */
     sweeps: 0,
     /** Videos paused because they started without being asked to. */
-    autoplaysHeld: 0
+    autoplaysHeld: 0,
+    /** Embedded frames whose allow attribute had "autoplay" removed. */
+    autoplayFramesHeld: 0
   };
   var startedAt = Date.now();
   var lastScanAt = 0;
@@ -892,7 +894,7 @@
           value: "manual",
           label: "Only when I start them",
           gain: "nothing moves on the page until you press play",
-          cost: "one more click to watch; a video in an embedded frame cannot be held"
+          cost: "one more click to watch; embedded players reload once as they appear"
         }
       ]
     },
@@ -3214,9 +3216,19 @@
   // src/features/video.js
   var GESTURE_WINDOW_MS = 2e3;
   var ACTIVATING_KEYS = /* @__PURE__ */ new Set(["Enter", " "]);
+  var isAutoplayEntry = (entry) => /^\s*autoplay(\s|$)/i.test(entry);
+  function withoutAutoplay(allow) {
+    return allow.split(";").filter((entry) => !isAutoplayEntry(entry)).join(";").trim();
+  }
+  function reloadFrame(frame) {
+    const src = frame.getAttribute("src");
+    if (src) frame.setAttribute("src", src);
+  }
   function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}) {
     let listening = false;
     let lastGesture = null;
+    let frameObserver = null;
+    const changedFrames = /* @__PURE__ */ new WeakMap();
     const started2 = /* @__PURE__ */ new WeakSet();
     function covers(video, x, y) {
       const rect = video.getBoundingClientRect();
@@ -3263,10 +3275,44 @@
       for (const video of document.querySelectorAll("video")) {
         if (!video.paused && video.muted && !started2.has(video) && !askedFor(video)) hold(video);
       }
+      holdFramesIn(document);
+    }
+    function holdFrame(frame) {
+      const allow = frame.getAttribute("allow");
+      if (!allow || !allow.split(";").some(isAutoplayEntry)) return;
+      if (frame.closest('[role="dialog"]')) return;
+      const first = !changedFrames.has(frame);
+      if (first) changedFrames.set(frame, allow);
+      frame.setAttribute("allow", withoutAutoplay(allow));
+      if (!first) return;
+      reloadFrame(frame);
+      counters.autoplayFramesHeld += 1;
+      log.debug("removed autoplay from an embedded frame");
+    }
+    function holdFramesIn(root) {
+      if (root.tagName === "IFRAME") holdFrame(root);
+      root.querySelectorAll?.("iframe[allow]").forEach(holdFrame);
+    }
+    function restoreFrames() {
+      for (const frame of document.querySelectorAll("iframe")) {
+        const original = changedFrames.get(frame);
+        if (original === void 0) continue;
+        changedFrames.delete(frame);
+        frame.setAttribute("allow", original);
+        reloadFrame(frame);
+      }
     }
     function listen() {
       if (listening) return;
       listening = true;
+      frameObserver = new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node2 of record.addedNodes) {
+            if (node2.nodeType === 1) holdFramesIn(node2);
+          }
+        }
+      });
+      frameObserver.observe(document.documentElement, { childList: true, subtree: true });
       document.addEventListener("play", onPlay, true);
       document.addEventListener("playing", onPlay, true);
       window.addEventListener("pointerdown", onPointerDown, true);
@@ -3275,6 +3321,8 @@
     function unlisten() {
       if (!listening) return;
       listening = false;
+      frameObserver?.disconnect();
+      frameObserver = null;
       document.removeEventListener("play", onPlay, true);
       document.removeEventListener("playing", onPlay, true);
       window.removeEventListener("pointerdown", onPointerDown, true);
@@ -3287,6 +3335,7 @@
         sweep();
       } else {
         unlisten();
+        restoreFrames();
       }
     }
     return {
@@ -5207,7 +5256,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   // src/main.js
   var VERSION = true ? "1.2.0" : "0.0.0-dev";
   var CHANNEL = true ? "stable" : "dev";
-  var BUILD = true ? "3c897c3" : "dev";
+  var BUILD = true ? "f29da2d" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -5338,7 +5387,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     [".tc-quiet-post", "posts tagged by Threadcalm"],
     [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"],
     ["video", "video elements"],
-    ["iframe", "embedded frames"]
+    ["iframe", "embedded frames"],
+    ['iframe[allow*="autoplay"]', "frames allowed to autoplay"]
   ];
   function activityLines() {
     const stats = snapshot();
@@ -5352,6 +5402,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
       `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
       `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
+      `  ${String(stats.autoplayFramesHeld).padStart(7)}  frames changed to stop autoplay`,
       `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
       `  ${String(idle === null ? "never" : idle).padStart(7)}  seconds since the last scan`,
       "",

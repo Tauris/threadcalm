@@ -29,6 +29,8 @@ export const counters = {
   sweeps: 0,
   /** Videos paused because they started without being asked to. */
   autoplaysHeld: 0,
+  /** Embedded frames whose allow attribute had "autoplay" removed. */
+  autoplayFramesHeld: 0,
 };
 
 let startedAt = Date.now();

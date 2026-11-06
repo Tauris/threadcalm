@@ -252,9 +252,12 @@ the node.
 Engage has played feed videos, muted and with captions, as they scroll into view since about mid-2025
 (Message Center MC1088730), on the web and in Teams desktop, with a tenant-wide admin switch.
 
-**Not yet confirmed on a real page:** whether the player is a plain `<video>` in the document, or sits
-in a cross-origin iframe or a shadow root, where `video.js` cannot see it. The layout diagnostics report
-the counts that answer this.
+**Seen on a real page:** the player is a cross-origin iframe served from the tenant's SharePoint site,
+with `allow="autoplay *; ..."` and inside a `focus-catcher-wrapper` div. `video.js` therefore cannot see
+its `<video>`, and removes `autoplay` from `allow` instead.
+
+**Not yet confirmed:** that removing it stops the video. Browsers may treat muted playback differently
+from playback with sound, and the player may start itself in other ways.
 
 ## Keeping the page usable
 
