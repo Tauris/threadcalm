@@ -29,6 +29,7 @@ import { snapshot } from './core/stats.js';
 import { createReadingMode } from './features/reading.js';
 import { createShortcuts } from './features/shortcuts.js';
 import { createTranslateTamer } from './features/translate.js';
+import { createVideoGuard } from './features/video.js';
 
 import { createPanel } from './ui/panel.js';
 import { ALL_STYLES } from './ui/styles.js';
@@ -95,6 +96,7 @@ function main() {
 
   const expander = createExpander({ matchers });
   const translate = createTranslateTamer({ matchers });
+  const videoGuard = createVideoGuard();
   const declutter = createDeclutterer({ matchers });
   const highlighter = createHighlighter({ matchers });
   const quietChrome = createQuietChrome();
@@ -124,6 +126,7 @@ function main() {
     readingMode,
     expander,
     translate,
+    videoGuard,
     declutter,
     highlighter,
     quietChrome,
@@ -216,6 +219,8 @@ const HEALTH_SELECTORS = [
   ['[data-testid="overflow-set"]', 'action rows'],
   ['.tc-quiet-post', 'posts tagged by Threadcalm'],
   ['.tc-translate-compact, .tc-translate-hidden', 'translate controls handled'],
+  ['video', 'video elements'],
+  ['iframe', 'embedded frames'],
 ];
 
 /**
@@ -246,6 +251,7 @@ function activityLines() {
     `  ${String(stats.candidates).padStart(7)}  controls examined`,
     `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
     `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+    `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
     `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
     `  ${String(idle === null ? 'never' : idle).padStart(7)}  seconds since the last scan`,
     '',

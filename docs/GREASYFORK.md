@@ -19,6 +19,8 @@ shortcuts the web app never had.
   Chinese, Korean and other scripts are recognised even when a post quotes English.
 - **Copies a thread as Markdown or plain text**, with authors, timestamps, reply nesting and
   a link back. Press `c` on any post in the thread.
+- **Videos on your terms.** Engage starts videos as you scroll to them; optionally, they wait until
+  you press play. Off by default.
 - **Quiets the page.** The Like / Comment / Share bar, the comment boxes, the copy buttons and
   the translation prompts can each be toned down, in several modes. Every choice in the
   settings is listed with what it gains and what it costs.

@@ -27,6 +27,8 @@ export const counters = {
   candidates: 0,
   /** Feature sweeps, triggered by a reported DOM change or navigation. */
   sweeps: 0,
+  /** Videos paused because they started without being asked to. */
+  autoplaysHeld: 0,
 };
 
 let startedAt = Date.now();

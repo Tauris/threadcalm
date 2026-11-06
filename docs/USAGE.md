@@ -12,6 +12,7 @@ the [README](../README.md).
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Thread expansion](#thread-expansion)
 - [Translation controls](#translation-controls)
+- [Videos](#videos)
 - [Post chrome](#post-chrome)
 - [Reading mode](#reading-mode)
 - [Clutter](#clutter)
@@ -162,6 +163,28 @@ It is reliable on a paragraph and unreliable on "Thanks!", so it declines to gue
 hiding the control on a post you cannot read — that is the worse error of the two. If you see
 translate controls surviving on posts you can read, the text was too short to judge; lower the
 threshold if you would rather it guessed more freely.
+
+## Videos
+
+Engage plays feed videos, muted, as they scroll into view. That is Engage's own behaviour, and
+Threadcalm leaves it alone by default. Your organisation's admins can switch it off for everyone;
+**When videos play** lets you do it for yourself:
+
+| Choice | Gain | Cost |
+|---|---|---|
+| **Let Engage decide** (default) | Engage exactly as it comes | videos start, muted, as you scroll to them |
+| **Only when I start them** | nothing moves on the page until you press play | one more click to watch |
+
+With *Only when I start them*, a video that starts by itself is paused straight away, and may show
+its first frame or a brief flicker. A video counts as started by you if you clicked it, clicked
+anywhere in its post other than the Like / Comment / Share bar, or pressed Enter or Space on a control
+there, within the last two seconds. A video you started is then left alone, and one in a dialog is
+never held. Threadcalm errs towards letting a video play, so one may occasionally slip through.
+
+A video may still download part of itself: this holds playback, not the network. A video in an
+embedded frame from another site cannot be reached by a userscript at all. If videos still start, *Copy
+layout diagnostics* shows how many `video` elements and embedded frames the page has, and how many
+videos were held.
 
 ## Post chrome
 
@@ -426,6 +449,12 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Languages I read | English, German |
 | Minimum detection confidence | 0.55 |
 | Automatic translation | off |
+
+### Videos
+
+| Setting | Default |
+|---|---|
+| When videos play | Let Engage decide |
 
 ### Post chrome
 

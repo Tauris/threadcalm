@@ -71,6 +71,7 @@ src/
     translate.js       the translation control: compacting, automatic translation, for copies
     thread.js          reading a conversation out of the DOM, rendering it
     copy.js            clipboard actions, translation marks, the per-post chip
+    video.js           optionally holding videos that start by themselves
     declutter.js       hiding promoted/suggested cards
     highlight.js       unanswered and not-seen-before markers
     reading.js         reading mode
@@ -188,6 +189,19 @@ the bracket in `Show original (Japanese)`, and the captured text.
 
 Copying is the one exception to "on screen": `translateForCopy()` works through every eligible post
 of the thread before it is read, under the same rules otherwise, and at most 40 per copy.
+
+## Holding videos
+
+With `video.autoplay` left at its default, `video.js` attaches no listener at all. Set to `manual`, it
+catches `play` and `playing` in the capture phase on the document, since media events do not bubble,
+and calls `pause()` on a video nobody asked for. It assumes nothing about Engage's player beyond a
+`<video>`, and it never touches the player's DOM.
+
+"Asked for" is read generously, because pausing a video the reader just started is the failure to
+avoid: a trusted click or key press in the last two seconds, on the video's area or anywhere in its
+post except the action row. The script's own `.click()` calls are untrusted, so expansion and
+translation never count. A cross-origin iframe is out of reach, which is why the diagnostics report
+`video` and `iframe` counts.
 
 ## Language detection
 

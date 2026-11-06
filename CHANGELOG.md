@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **When videos play**, in a new *Videos* settings group. Engage starts videos, muted, as they scroll
+  into view, and the default leaves that alone. *Only when I start them* pauses a video that starts
+  by itself; one you clicked, or started from the keyboard, plays as usual. The layout diagnostics now
+  report `video` elements, embedded frames and videos held.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.2.0.20
+// @version     1.2.0.21
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.2.0.20
+ * Threadcalm (beta) v1.2.0.21
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -100,7 +100,9 @@
     /** Elements a scan looked at, summed over all scans. */
     candidates: 0,
     /** Feature sweeps, triggered by a reported DOM change or navigation. */
-    sweeps: 0
+    sweeps: 0,
+    /** Videos paused because they started without being asked to. */
+    autoplaysHeld: 0
   };
   var startedAt = Date.now();
   var lastScanAt = 0;
@@ -728,6 +730,7 @@
   var GROUPS = [
     { id: "expand", title: "Thread expansion" },
     { id: "translate", title: "Translation controls" },
+    { id: "video", title: "Videos" },
     { id: "quiet", title: "Post chrome" },
     { id: "reading", title: "Reading" },
     { id: "declutter", title: "Clutter" },
@@ -871,6 +874,27 @@
       default: false,
       label: "Automatic translation",
       help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off."
+    },
+    // -- Videos --------------------------------------------------------------
+    {
+      key: "video.autoplay",
+      type: "select",
+      default: "engage",
+      label: "When videos play",
+      options: [
+        {
+          value: "engage",
+          label: "Let Engage decide",
+          gain: "Engage exactly as it comes",
+          cost: "videos start, muted, as you scroll to them"
+        },
+        {
+          value: "manual",
+          label: "Only when I start them",
+          gain: "nothing moves on the page until you press play",
+          cost: "one more click to watch; a video in an embedded frame cannot be held"
+        }
+      ]
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -3187,6 +3211,96 @@
     };
   }
 
+  // src/features/video.js
+  var GESTURE_WINDOW_MS = 2e3;
+  var ACTIVATING_KEYS = /* @__PURE__ */ new Set(["Enter", " "]);
+  function createVideoGuard({ isGenuine = (event) => event.isTrusted } = {}) {
+    let listening = false;
+    let lastGesture = null;
+    const started2 = /* @__PURE__ */ new WeakSet();
+    function covers(video, x, y) {
+      const rect = video.getBoundingClientRect();
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    }
+    function askedFor(video) {
+      if (video.closest('[role="dialog"]')) return true;
+      if (!lastGesture || Date.now() - lastGesture.at > GESTURE_WINDOW_MS) return false;
+      const { x, y, target } = lastGesture;
+      if (covers(video, x, y)) return true;
+      if (target.closest(ACTION_ROW_SELECTOR)) return false;
+      return Boolean(closestPost(video)?.contains(target));
+    }
+    function hold(video) {
+      video.pause();
+      counters.autoplaysHeld += 1;
+      log.debug("held a video that started by itself");
+    }
+    function onPlay(event) {
+      const video = event.target;
+      if (video?.tagName !== "VIDEO" || started2.has(video)) return;
+      if (askedFor(video)) {
+        started2.add(video);
+        return;
+      }
+      hold(video);
+    }
+    function onPointerDown(event) {
+      if (!isGenuine(event) || !(event.target instanceof Element)) return;
+      lastGesture = { at: Date.now(), x: event.clientX, y: event.clientY, target: event.target };
+    }
+    function onKeyDown(event) {
+      if (!isGenuine(event) || !ACTIVATING_KEYS.has(event.key)) return;
+      if (!(event.target instanceof Element)) return;
+      const rect = event.target.getBoundingClientRect();
+      lastGesture = {
+        at: Date.now(),
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        target: event.target
+      };
+    }
+    function sweep() {
+      for (const video of document.querySelectorAll("video")) {
+        if (!video.paused && video.muted && !started2.has(video) && !askedFor(video)) hold(video);
+      }
+    }
+    function listen() {
+      if (listening) return;
+      listening = true;
+      document.addEventListener("play", onPlay, true);
+      document.addEventListener("playing", onPlay, true);
+      window.addEventListener("pointerdown", onPointerDown, true);
+      window.addEventListener("keydown", onKeyDown, true);
+    }
+    function unlisten() {
+      if (!listening) return;
+      listening = false;
+      document.removeEventListener("play", onPlay, true);
+      document.removeEventListener("playing", onPlay, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      lastGesture = null;
+    }
+    function apply() {
+      if (get("video.autoplay") === "manual") {
+        listen();
+        sweep();
+      } else {
+        unlisten();
+      }
+    }
+    return {
+      start: apply,
+      stop: unlisten,
+      onSettingsChanged(changed) {
+        if ("video.autoplay" in changed) apply();
+      },
+      onDomChanged() {
+        if (listening) sweep();
+      }
+    };
+  }
+
   // src/ui/panel.js
   var PANEL_ID = "tc-panel";
   var SETTINGS_ID = "tc-settings";
@@ -5091,9 +5205,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.2.0.20" : "0.0.0-dev";
+  var VERSION = true ? "1.2.0.21" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "6c441f1" : "dev";
+  var BUILD = true ? "520042e" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -5126,6 +5240,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     addStyle(ALL_STYLES);
     const expander = createExpander({ matchers });
     const translate = createTranslateTamer({ matchers });
+    const videoGuard = createVideoGuard();
     const declutter = createDeclutterer({ matchers });
     const highlighter = createHighlighter({ matchers });
     const quietChrome = createQuietChrome();
@@ -5152,6 +5267,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       readingMode,
       expander,
       translate,
+      videoGuard,
       declutter,
       highlighter,
       quietChrome,
@@ -5220,7 +5336,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     [".y-fixedGridColumn", "comment containers"],
     ['[data-testid="overflow-set"]', "action rows"],
     [".tc-quiet-post", "posts tagged by Threadcalm"],
-    [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"]
+    [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"],
+    ["video", "video elements"],
+    ["iframe", "embedded frames"]
   ];
   function activityLines() {
     const stats = snapshot();
@@ -5233,6 +5351,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       `  ${String(stats.candidates).padStart(7)}  controls examined`,
       `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
       `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+      `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
       `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
       `  ${String(idle === null ? "never" : idle).padStart(7)}  seconds since the last scan`,
       "",

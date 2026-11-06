@@ -247,6 +247,15 @@ state in any language.
 text is not the author's own. The compacting itself is done by adding a class, never by touching
 the node.
 
+## Videos
+
+Engage has played feed videos, muted and with captions, as they scroll into view since about mid-2025
+(Message Center MC1088730), on the web and in Teams desktop, with a tenant-wide admin switch.
+
+**Not yet confirmed on a real page:** whether the player is a plain `<video>` in the document, or sits
+in a cross-origin iframe or a shadow root, where `video.js` cannot see it. The layout diagnostics report
+the counts that answer this.
+
 ## Keeping the page usable
 
 Engage's own accessibility model — native buttons, ARIA roles, accessible names on icon-only
