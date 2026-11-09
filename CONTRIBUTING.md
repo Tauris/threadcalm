@@ -107,7 +107,7 @@ every feature would apply twice.
    local file — raise `betaBuild` above that build's number before the next push. Otherwise the
    installed copy compares a lower number and is never offered the update.
 3. Install
-   [`dist/threadcalm.beta.user.js`](https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js)
+   [`dist/threadcalm.beta.user.js`](https://raw.githubusercontent.com/Tauris/threadcalm/beta/dist/threadcalm.beta.user.js)
    from the beta branch, and disable the stable script while you test.
 4. Exercise it against a real tenant. The beta keeps updating from `beta`, so every later push is
    picked up without reinstalling.
@@ -129,8 +129,11 @@ exactly as a stale stable one does.
 3. `npm run check`, then commit the rebuilt `dist/` — it is the file people install.
 4. Tag `vX.Y.Z`.
 
-`@downloadURL` and `@updateURL` point at `raw/main/dist/`, so installed copies see a release as
-soon as it lands on `main`.
+`@downloadURL` and `@updateURL` point at `raw.githubusercontent.com/…/main/dist/`, so installed
+copies see a release as soon as it lands on `main`. They name the raw file host directly rather than
+`github.com/…/raw/…`, which only redirects there: that redirect failed worldwide for hours on
+2026-11-08 while the host itself kept serving, and an installed copy cannot be reached by any fix
+that has to travel through the address that is down.
 
 If you maintain a **private fork**, set `PUBLIC_REPO = false` in [src/meta.js](src/meta.js). The
 script's links back to GitHub then disappear instead of resolving to a repository nobody can

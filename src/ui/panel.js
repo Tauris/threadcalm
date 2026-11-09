@@ -504,6 +504,9 @@ export function createPanel({ expander, highlighter, version, channel = 'dev', b
         textButton('Copy diagnostics', () => bus.emit(EVENTS.COPY_DIAGNOSTICS), {
           title: 'Selector health and how hard the script has been working, for bug reports',
         }),
+        textButton('Copy video report', () => bus.emit(EVENTS.COPY_VIDEO_REPORT), {
+          title: 'How videos are built on this page and what was done about them, without any content, for bug reports',
+        }),
         textButton(
           'Forget seen posts',
           () => {

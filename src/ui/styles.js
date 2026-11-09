@@ -1355,6 +1355,126 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
+/*
+ * A video player kept from loading. The held frame is taken out of the flow and
+ * a tile the shape of a video takes its place -- dark, 16:9, a play ring in the
+ * middle -- so it reads as the video it is and not as a link. The tile is drawn
+ * in fixed dark colours on purpose: a video thumbnail is dark in every theme,
+ * and that is what the eye expects there. Clicking anywhere on it loads the
+ * player here; the small link underneath opens it on its own page instead.
+ */
+.tc-video-frame-held { display: none !important; }
+
+.tc-video-hold {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  padding: 16px;
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(116, 189, 179, .22), transparent 60%),
+    linear-gradient(160deg, #1d2326, #0f1416);
+  color: #f3f6f6;
+  font: 500 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+/* Film-strip edges: the one visual that says "video" without a frame of it. */
+.tc-video-hold::before,
+.tc-video-hold::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, .22) 0 6px, transparent 6px 14px);
+  opacity: .5;
+}
+.tc-video-hold::before { left: 6px; }
+.tc-video-hold::after { right: 6px; }
+
+.tc-video-hold-badge {
+  position: absolute !important;
+  top: 10px;
+  left: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.tc-video-hold-load {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tc-video-hold-load:focus-visible { outline: 2px solid #74bdb3; outline-offset: 2px; }
+
+.tc-video-hold-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 255, 255, .85);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .1);
+  transition: transform .12s ease, background .12s ease;
+}
+.tc-video-hold:hover .tc-video-hold-ring { background: rgba(255, 255, 255, .22); transform: scale(1.06); }
+.tc-video-hold-ring svg { width: 30px; height: 30px; margin-left: 3px; }
+
+.tc-video-hold-note { font-size: 12px; opacity: .8; }
+
+.tc-video-hold-open {
+  font-size: 12px;
+  color: #a9d9d2;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tc-video-hold-open:hover { color: #fff; }
+
+.tc-video-hold-by {
+  position: absolute !important;
+  right: 24px;
+  bottom: 8px;
+  font-size: 10px;
+  opacity: .5;
+}
+
+/* The player, rebuilt in the tile's place after Engage took its own frame away. */
+.tc-video-rebuilt {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .tc-video-hold-badge, .tc-video-hold-by { display: none; }
+  .tc-video-hold-ring { width: 48px; height: 48px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #tc-toasts .tc-toast,
   .tc-translate-compact,

@@ -20,6 +20,7 @@ const STORAGE_KEY = 'settings';
 export const GROUPS = [
   { id: 'expand', title: 'Thread expansion' },
   { id: 'translate', title: 'Translation controls' },
+  { id: 'video', title: 'Videos' },
   { id: 'quiet', title: 'Post chrome' },
   { id: 'reading', title: 'Reading' },
   { id: 'declutter', title: 'Clutter' },
@@ -191,6 +192,27 @@ export const SCHEMA = [
     help: 'Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off.',
   },
 
+  // -- Videos --------------------------------------------------------------
+  {
+    key: 'video.autoplay',
+    type: 'select',
+    default: 'engage',
+    label: 'When videos play',
+    options: [
+      {
+        value: 'engage',
+        label: 'Let Engage decide',
+        gain: 'Engage exactly as it comes',
+        cost: 'videos start, muted, as you scroll to them',
+      },
+      {
+        value: 'manual',
+        label: 'Only when I click them',
+        gain: 'saves data: a video loads only when you click it, and nothing moves until then',
+        cost: 'one more click to watch, and no preview picture',
+      },
+    ],
+  },
   // -- Post chrome ---------------------------------------------------------
   {
     key: 'quiet.actions',

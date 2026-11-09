@@ -247,6 +247,58 @@ state in any language.
 text is not the author's own. The compacting itself is done by adding a class, never by touching
 the node.
 
+## Videos
+
+Engage has played feed videos, muted and with captions, as they scroll into view since about mid-2025
+(Message Center MC1088730), on the web and in Teams desktop, with a tenant-wide admin switch.
+
+**Seen on a real page (video report, 1.2.0.24, Edge 156):** the player is a cross-origin iframe with
+`allow="autoplay *;clipboard-write *;"`, `allowfullscreen`, `sandbox="allow-forms allow-scripts
+allow-same-origin allow-popups allow-downloads"`, a title, an inline style, and **no `src` attribute**.
+It sits in `div[data-testid="one-player"]` inside `.y-tile` inside `.videoCardActions-NNN` inside
+`div[data-testid="focus-catcher-wrapper"]`, within the `.qaThreadStarter` post. The frame is created
+when the post scrolls into view (730x411 in the viewport, ~7 s after load) and is already cross-origin
+when seen. The report also lists a hidden `webshell.suite.office.com` frame at body level, which is
+not a player and is left alone.
+
+No `src` means the player SDK navigates the frame from script -- `contentWindow.location.replace(url)`
+or one of its siblings -- so no attribute ever changes and nothing watching attributes can act. That is
+why removing `autoplay` from `allow` (1.2.0.22) and blanking `src` (1.2.0.23/24) both did nothing:
+there was no `src` to blank. 1.2.0.23 was additionally broken by counting its own `about:blank` write
+as the page fighting back. `video.js` now intercepts the navigation itself: see ARCHITECTURE.
+
+**Second report (1.2.0.27):** with a `Proxy` standing in for the frame's `contentWindow`, each player
+frame appeared, was marked *waiting*, and was **removed by Engage about 1.4 s later** -- without a single
+`location` call reaching the proxy -- and Engage showed a plain file link in its place. So the SDK does
+reach into the frame, does not navigate it through `location`, and gives up when the window it gets
+back is not the real one (an `event.source === iframe.contentWindow` handshake would do exactly that).
+The sandbox -- `allow-forms allow-scripts allow-same-origin` -- is what a parent needs to write a form
+with a token into a blank frame and submit it from inside, which fits every observation: no `src`, no
+`name`, cross-origin afterwards. `video.js` now hands back the real window and intercepts
+`HTMLFormElement.prototype.submit` and the `submit` event in the frame's realm.
+
+**Third report (1.2.0.28): confirmed.** `held (form submission intercepted)` for every player frame;
+the form is a `post` to `*-my.sharepoint.com/personal/<user>/_layouts/15/<page>?uniqueId=<uuid>
+&correlationId=<uuid>&auth=…&embed=<json>` with a 3 KB fragment. Note `uniqueId`, lower-case. Once the
+frame is held the SDK polls it with `postMessage` ten times a second, indefinitely. Two things failed
+after the hold: posting the kept form *from the page* with `target=<frame name>` opened a new tab -- the
+browser would not take the sandboxed frame as the target -- and left the frame blank; and the preview
+image did not arrive (the reason was pushed out of the timeline by the polling). The form is now posted
+from inside the frame's own document, as the SDK does, the timeline folds repeats, and the guard summary
+carries the poster state and the form's field names.
+
+**Fourth report (1.2.0.29): one click plays the video in place.** The preview picture failed 0.2 s after
+it was requested -- a login redirect: the Engage page holds no SharePoint sign-in, which is why Engage
+itself passes the player a token in a form rather than relying on cookies. A picture would take a request
+of the script's own (the token, through `GM_xmlhttpRequest`), and the script promises none, so the
+preview setting was removed again and the tile stays dark. The `embed` JSON in the form's address was
+never inspected for a thumbnail address for the same reason: fetching one would still be a request.
+
+**How to find out:** *Copy video report* (settings sheet or manager menu). It lists every frame and video
+with ancestry and attributes, redacted to structure, and the timeline of what happened to each. The
+questions it answers: is the player a frame, a `<video>`, or inside a shadow root; what is its address
+shape; does the page put the address back or recreate the frame; and what did the guard decide and why.
+
 ## Keeping the page usable
 
 Engage's own accessibility model — native buttons, ARIA roles, accessible names on icon-only

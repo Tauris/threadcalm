@@ -52,4 +52,5 @@ export const EVENTS = {
   TOAST: 'toast',
   SHOW_HELP: 'show-help',
   COPY_DIAGNOSTICS: 'copy-diagnostics',
+  COPY_VIDEO_REPORT: 'copy-video-report',
 };

@@ -12,6 +12,7 @@ the [README](../README.md).
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Thread expansion](#thread-expansion)
 - [Translation controls](#translation-controls)
+- [Videos](#videos)
 - [Post chrome](#post-chrome)
 - [Reading mode](#reading-mode)
 - [Clutter](#clutter)
@@ -162,6 +163,25 @@ It is reliable on a paragraph and unreliable on "Thanks!", so it declines to gue
 hiding the control on a post you cannot read — that is the worse error of the two. If you see
 translate controls surviving on posts you can read, the text was too short to judge; lower the
 threshold if you would rather it guessed more freely.
+
+## Videos
+
+Engage plays feed videos, muted, as they scroll into view. That is Engage's own behaviour, and
+Threadcalm leaves it alone by default. Your organisation's admins can switch it off for everyone;
+**When videos play** lets you do it for yourself:
+
+| Choice | Gain | Cost |
+|---|---|---|
+| **Let Engage decide** (default) | Engage exactly as it comes | videos start, muted, as you scroll to them |
+| **Only when I click them** | saves data: a video loads only when you click it, and nothing moves until then | one more click to watch, and no preview picture |
+
+With *Only when I click them*, Engage's video player is kept from loading, and a dark tile the shape of
+a video takes its place, marked **Embedded video**, with a play ring and *Not loaded, to save data*.
+Clicking anywhere on it loads the player right there; the small *Open in a new tab* link underneath
+opens the player on its own page instead. Engage itself may react to a player that never loaded by
+showing a plain file link beside the tile -- that link opens the file in a new window and is Engage's,
+not Threadcalm's; the tile is the way to get the video back in its place. This is the choice that saves
+data on a slow or metered connection. A video in a dialog of its own always loads.
 
 ## Post chrome
 
@@ -426,6 +446,12 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Languages I read | English, German |
 | Minimum detection confidence | 0.55 |
 | Automatic translation | off |
+
+### Videos
+
+| Setting | Default |
+|---|---|
+| When videos play | Let Engage decide |
 
 ### Post chrome
 

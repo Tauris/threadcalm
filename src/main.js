@@ -29,6 +29,8 @@ import { snapshot } from './core/stats.js';
 import { createReadingMode } from './features/reading.js';
 import { createShortcuts } from './features/shortcuts.js';
 import { createTranslateTamer } from './features/translate.js';
+import { createVideoGuard } from './features/video.js';
+import { createVideoRecorder } from './features/videoreport.js';
 
 import { createPanel } from './ui/panel.js';
 import { ALL_STYLES } from './ui/styles.js';
@@ -95,6 +97,8 @@ function main() {
 
   const expander = createExpander({ matchers });
   const translate = createTranslateTamer({ matchers });
+  const videoRecorder = createVideoRecorder();
+  const videoGuard = createVideoGuard({ recorder: videoRecorder });
   const declutter = createDeclutterer({ matchers });
   const highlighter = createHighlighter({ matchers });
   const quietChrome = createQuietChrome();
@@ -124,6 +128,9 @@ function main() {
     readingMode,
     expander,
     translate,
+    // Before the guard, so its record starts before the guard's first decision.
+    videoRecorder,
+    videoGuard,
     declutter,
     highlighter,
     quietChrome,
@@ -142,6 +149,7 @@ function main() {
   bus.on(EVENTS.NAVIGATE, (payload) => dispatch('onNavigate', payload));
   bus.on(EVENTS.DOM_CHANGED, () => dispatch('onDomChanged'));
   bus.on(EVENTS.COPY_DIAGNOSTICS, () => { copyDiagnostics(); });
+  bus.on(EVENTS.COPY_VIDEO_REPORT, () => { copyVideoReport({ videoRecorder, videoGuard }); });
 
   bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
     if (MATCHER_KEYS.some((key) => key in changed)) {
@@ -156,7 +164,7 @@ function main() {
   noticeUnsupportedLanguage();
 
   startSpaWatcher();
-  registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode });
+  registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard });
 
   log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
 
@@ -173,7 +181,7 @@ function main() {
   }, 5000);
 }
 
-function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode }) {
+function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard }) {
   registerMenuCommand('Settings…', () => panel.openSettings());
   registerMenuCommand('Keyboard shortcuts…', () => shortcuts.showHelp());
 
@@ -199,6 +207,7 @@ function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMo
   registerMenuCommand('Show the Threadcalm panel', () => panel.show());
 
   registerMenuCommand('Copy layout diagnostics (for bug reports)', copyDiagnostics);
+  registerMenuCommand('Copy video report (for bug reports)', () => copyVideoReport({ videoRecorder, videoGuard }));
 }
 
 /**
@@ -216,6 +225,10 @@ const HEALTH_SELECTORS = [
   ['[data-testid="overflow-set"]', 'action rows'],
   ['.tc-quiet-post', 'posts tagged by Threadcalm'],
   ['.tc-translate-compact, .tc-translate-hidden', 'translate controls handled'],
+  ['video', 'video elements'],
+  ['iframe', 'embedded frames'],
+  ['iframe[allow*="autoplay"]', 'frames allowed to autoplay'],
+  ['.tc-video-hold', 'players waiting for a click'],
 ];
 
 /**
@@ -246,6 +259,8 @@ function activityLines() {
     `  ${String(stats.candidates).padStart(7)}  controls examined`,
     `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
     `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+    `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
+    `  ${String(stats.playersNotLoaded).padStart(7)}  embedded players kept from loading`,
     `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
     `  ${String(idle === null ? 'never' : idle).padStart(7)}  seconds since the last scan`,
     '',
@@ -253,6 +268,27 @@ function activityLines() {
     'taken minutes apart. A rising element count means the page is still',
     'growing, which is expansion working rather than anything leaking.',
   ];
+}
+
+/**
+ * How video is built on this page, without its content.
+ *
+ * The player cannot be seen from outside a tenant, so this is how someone who
+ * can see it tells someone who cannot: every frame and video, its ancestry and
+ * attributes, what the guard decided, and the order things happened in.
+ */
+async function copyVideoReport({ videoRecorder, videoGuard }) {
+  const report = videoRecorder.report({
+    header: [`Threadcalm ${VERSION} (${CHANNEL} ${BUILD})`, navigator.userAgent, `host: ${location.host}`],
+    setting: settings.get('video.autoplay'),
+    guard: videoGuard.inspect(),
+  });
+  const copied = await copyToClipboard(report);
+  bus.emit(EVENTS.TOAST, {
+    message: copied ? 'Video report copied' : 'Clipboard blocked — see the console',
+    tone: copied ? 'info' : 'warn',
+  });
+  if (!copied) log.info(report);
 }
 
 async function copyDiagnostics() {

@@ -22,7 +22,7 @@ let lastUrl = '';
  * settles, and the cost of that loop grows with the length of the feed.
  */
 const OWN_UI_SELECTOR = '#tc-panel, #tc-toasts, #tc-settings, #tc-help';
-const OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip`;
+const OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip, .tc-video-hold`;
 
 /** The element a mutation record concerns, whatever kind of node it names. */
 function elementOf(node) {

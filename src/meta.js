@@ -10,6 +10,15 @@
  */
 export const REPOSITORY = 'https://github.com/Tauris/threadcalm';
 
+/**
+ * Where the built files are fetched from: GitHub's raw file host, addressed
+ * directly. `github.com/<owner>/<repo>/raw/...` only ever redirects here, and
+ * on 2026-11-08 that redirect returned 504 for every repository, worldwide,
+ * for hours, while this host served the same files normally. Every installed
+ * copy updates from these addresses, so the hop that can fail is left out.
+ */
+export const RAW_FILES = 'https://raw.githubusercontent.com/Tauris/threadcalm';
+
 export const SCRIPT_NAME = 'Threadcalm';
 
 /**
@@ -140,7 +149,7 @@ export function metadataFor(channel = DEFAULT_CHANNEL) {
   const spec = CHANNELS[channel];
   if (!spec) throw new Error(`unknown channel: ${channel}`);
 
-  const url = `${REPOSITORY}/raw/${spec.branch}/dist/${spec.file}`;
+  const url = `${RAW_FILES}/${spec.branch}/dist/${spec.file}`;
   return {
     ...metadata,
     name: `${SCRIPT_NAME}${spec.nameSuffix}`,
@@ -160,8 +169,8 @@ export const metadata = {
   license: 'BSD-3-Clause',
   homepageURL: REPOSITORY,
   supportURL: `${REPOSITORY}/issues`,
-  downloadURL: `${REPOSITORY}/raw/main/dist/threadcalm.user.js`,
-  updateURL: `${REPOSITORY}/raw/main/dist/threadcalm.user.js`,
+  downloadURL: `${RAW_FILES}/main/dist/threadcalm.user.js`,
+  updateURL: `${RAW_FILES}/main/dist/threadcalm.user.js`,
   match: MATCHES,
   // Some Tampermonkey configurations still honour @include more reliably than
   // @match on wildcard subdomains, so both are declared.

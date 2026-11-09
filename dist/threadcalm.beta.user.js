@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.2.0.20
+// @version     1.3.0.31
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
 // @license     BSD-3-Clause
 // @homepageURL https://github.com/Tauris/threadcalm
 // @supportURL  https://github.com/Tauris/threadcalm/issues
-// @downloadURL https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js
-// @updateURL   https://github.com/Tauris/threadcalm/raw/beta/dist/threadcalm.beta.user.js
+// @downloadURL https://raw.githubusercontent.com/Tauris/threadcalm/beta/dist/threadcalm.beta.user.js
+// @updateURL   https://raw.githubusercontent.com/Tauris/threadcalm/beta/dist/threadcalm.beta.user.js
 // @match       https://engage.cloud.microsoft/*
 // @match       https://*.engage.cloud.microsoft/*
 // @match       https://web.yammer.com/*
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.2.0.20
+ * Threadcalm (beta) v1.3.0.31
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -86,7 +86,8 @@
     EXPAND_STATE: "expand-state",
     TOAST: "toast",
     SHOW_HELP: "show-help",
-    COPY_DIAGNOSTICS: "copy-diagnostics"
+    COPY_DIAGNOSTICS: "copy-diagnostics",
+    COPY_VIDEO_REPORT: "copy-video-report"
   };
 
   // src/core/stats.js
@@ -100,7 +101,11 @@
     /** Elements a scan looked at, summed over all scans. */
     candidates: 0,
     /** Feature sweeps, triggered by a reported DOM change or navigation. */
-    sweeps: 0
+    sweeps: 0,
+    /** Videos paused because they started without being asked to. */
+    autoplaysHeld: 0,
+    /** Embedded players kept from loading until clicked. */
+    playersNotLoaded: 0
   };
   var startedAt = Date.now();
   var lastScanAt = 0;
@@ -728,6 +733,7 @@
   var GROUPS = [
     { id: "expand", title: "Thread expansion" },
     { id: "translate", title: "Translation controls" },
+    { id: "video", title: "Videos" },
     { id: "quiet", title: "Post chrome" },
     { id: "reading", title: "Reading" },
     { id: "declutter", title: "Clutter" },
@@ -871,6 +877,27 @@
       default: false,
       label: "Automatic translation",
       help: "Uses Engage’s own translation, once per post, when a post in a language you do not read has been on screen for half a second. Posts you scroll past or never reach are not translated. Posts too short to judge are left alone, and so is Han-only text if you read Japanese or Chinese. “Show original” always takes you back. Press t to switch it; pausing expansion switches it off."
+    },
+    // -- Videos --------------------------------------------------------------
+    {
+      key: "video.autoplay",
+      type: "select",
+      default: "engage",
+      label: "When videos play",
+      options: [
+        {
+          value: "engage",
+          label: "Let Engage decide",
+          gain: "Engage exactly as it comes",
+          cost: "videos start, muted, as you scroll to them"
+        },
+        {
+          value: "manual",
+          label: "Only when I click them",
+          gain: "saves data: a video loads only when you click it, and nothing moves until then",
+          cost: "one more click to watch, and no preview picture"
+        }
+      ]
     },
     // -- Post chrome ---------------------------------------------------------
     {
@@ -1245,7 +1272,7 @@
   var started = false;
   var lastUrl = "";
   var OWN_UI_SELECTOR = "#tc-panel, #tc-toasts, #tc-settings, #tc-help";
-  var OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip`;
+  var OWN_NODE_SELECTOR = `${OWN_UI_SELECTOR}, .tc-chip, .tc-video-hold`;
   function elementOf(node2) {
     if (!node2) return null;
     return node2.nodeType === 1 ? node2 : node2.parentElement;
@@ -2532,6 +2559,7 @@
 
   // src/meta.js
   var REPOSITORY = "https://github.com/Tauris/threadcalm";
+  var RAW_FILES = "https://raw.githubusercontent.com/Tauris/threadcalm";
   var SCRIPT_NAME = "Threadcalm";
   var PUBLIC_REPO = true;
   var LINKS = {
@@ -2574,8 +2602,8 @@
     license: "BSD-3-Clause",
     homepageURL: REPOSITORY,
     supportURL: `${REPOSITORY}/issues`,
-    downloadURL: `${REPOSITORY}/raw/main/dist/threadcalm.user.js`,
-    updateURL: `${REPOSITORY}/raw/main/dist/threadcalm.user.js`,
+    downloadURL: `${RAW_FILES}/main/dist/threadcalm.user.js`,
+    updateURL: `${RAW_FILES}/main/dist/threadcalm.user.js`,
     match: MATCHES,
     // Some Tampermonkey configurations still honour @include more reliably than
     // @match on wildcard subdomains, so both are declared.
@@ -3187,6 +3215,1010 @@
     };
   }
 
+  // src/features/videoreport.js
+  var MAX_EVENTS = 150;
+  var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var STRUCTURAL_SEGMENT = /^(_layouts|_api|_vti_bin|\d{1,3}|embed(\.aspx)?|stream(\.aspx)?|video(player)?|player|sites|teams|personal|portals|hub|media|viewer|preview|files?|api|v\d+|embed-player|onedrive|index\.html?)$/i;
+  var PUBLIC_HOST = /(^|\.)(cloud\.microsoft|yammer\.com|microsoft\.com|office\.com|office\.net|live\.com|azureedge\.net|akamaihd\.net)$/i;
+  function redactHost(host) {
+    if (!host) return "(none)";
+    const labels = host.toLowerCase().split(".");
+    if (labels.length <= 2 || PUBLIC_HOST.test(host)) return host.toLowerCase();
+    return `*.${labels.slice(-2).join(".")} (${labels.length} labels)`;
+  }
+  function valueShape(value) {
+    if (value === "") return "<empty>";
+    if (UUID.test(value)) return "<uuid>";
+    if (/^\d+$/.test(value)) return "<number>";
+    if (/^(true|false|1|0|yes|no)$/i.test(value)) return value.toLowerCase();
+    return `<${value.length} chars>`;
+  }
+  function redactUrl(raw) {
+    if (raw == null || raw === "") return "(none)";
+    if (raw === "about:blank") return "about:blank";
+    if (raw.startsWith("blob:")) return "blob:<redacted>";
+    if (raw.startsWith("data:")) return `data:${raw.slice(5, 40).split(/[;,]/)[0] || "<unknown>"}`;
+    if (raw.startsWith("javascript:")) return "javascript:<redacted>";
+    let url;
+    try {
+      url = new URL(raw, document.baseURI);
+    } catch {
+      return `<unparseable, ${raw.length} chars>`;
+    }
+    const path = url.pathname.split("/").map((segment) => segment === "" || STRUCTURAL_SEGMENT.test(segment) ? segment : "~").join("/");
+    const params = [...url.searchParams.entries()].map(([key, value]) => `${key}=${valueShape(value)}`);
+    const hash2 = url.hash ? ` #<${url.hash.length - 1} chars>` : "";
+    const query = params.length ? `?${params.join("&")}` : "";
+    return `${url.protocol}//${redactHost(url.hostname)}${path}${query}${hash2}`;
+  }
+  function classSummary(element) {
+    const tokens = [...element.classList ?? []];
+    if (tokens.length === 0) return "";
+    const shown = tokens.slice(0, 6).map((token) => token.length > 28 ? `${token.slice(0, 12)}…` : token);
+    return `.${shown.join(".")}${tokens.length > 6 ? ` (+${tokens.length - 6})` : ""}`;
+  }
+  var SAFE_ATTRIBUTES = /* @__PURE__ */ new Set([
+    "allow",
+    "sandbox",
+    "loading",
+    "referrerpolicy",
+    "allowfullscreen",
+    "frameborder",
+    "scrolling",
+    "width",
+    "height",
+    "role",
+    "tabindex",
+    "hidden",
+    "muted",
+    "autoplay",
+    "loop",
+    "controls",
+    "playsinline",
+    "preload",
+    "crossorigin",
+    "type",
+    "aria-hidden",
+    "aria-modal",
+    "data-testid",
+    "data-automationid"
+  ]);
+  function attributeSummary(element) {
+    return [...element.attributes].map(({ name, value }) => {
+      if (name === "src" || name === "poster" || name === "href") return `${name}=${redactUrl(value)}`;
+      if (name === "srcdoc") return `srcdoc=<${value.length} chars>`;
+      if (name === "class") return `class=${element.classList.length} tokens`;
+      if (name === "style") return `style=<${value.length} chars>`;
+      if (SAFE_ATTRIBUTES.has(name) && /^[\w\s;*'"().:/-]{0,160}$/.test(value)) return `${name}="${value}"`;
+      return `${name}=<${value.length} chars>`;
+    }).join("  ");
+  }
+  function rectOf(element) {
+    try {
+      const rect = element.getBoundingClientRect();
+      return `${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.left)},${Math.round(rect.top)}`;
+    } catch {
+      return "?";
+    }
+  }
+  function inViewport(element) {
+    try {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
+    } catch {
+      return false;
+    }
+  }
+  function describeElement(element, { post, shadowHost = false } = {}) {
+    const parts = [element.tagName.toLowerCase()];
+    const role = element.getAttribute("role");
+    if (role) parts.push(`role=${role}`);
+    for (const name of ["data-testid", "data-automationid"]) {
+      const value = element.getAttribute(name);
+      if (value) parts.push(`${name}=${/^[\w.-]{1,48}$/.test(value) ? value : `<${value.length} chars>`}`);
+    }
+    const classes = classSummary(element);
+    if (classes) parts.push(classes);
+    if (element.id) parts.push(`id=<${element.id.length} chars>`);
+    if (shadowHost || element.shadowRoot) parts.push("[shadow host]");
+    if (element === post) parts.push("[post]");
+    if (element.matches?.('[role="dialog"]')) parts.push("[dialog]");
+    try {
+      parts.push(`display:${getComputedStyle(element).display}`);
+    } catch {
+    }
+    parts.push(rectOf(element));
+    return parts.join("  ");
+  }
+  function ancestorLines(element, { limit = 14 } = {}) {
+    const post = closestPost(element);
+    const lines = [];
+    let node2 = element;
+    let shadowHost = false;
+    for (let depth = 0; node2 && depth < limit; depth += 1) {
+      const indent = "  ".repeat(Math.min(depth, 8));
+      lines.push(`${indent}${describeElement(node2, { post, shadowHost })}`);
+      if (node2 === document.body) break;
+      const parent = node2.parentNode;
+      shadowHost = Boolean(parent && !(parent instanceof Element) && parent.host);
+      if (shadowHost) {
+        lines.push(`${indent}  -- shadow root boundary --`);
+        node2 = parent.host;
+      } else {
+        node2 = node2.parentElement;
+      }
+    }
+    return lines;
+  }
+  function sameOriginState(frame) {
+    try {
+      const doc = frame.contentDocument;
+      if (!doc) return "no (blocked)";
+      return `yes (${doc.querySelectorAll("video").length} videos inside)`;
+    } catch {
+      return "no (blocked)";
+    }
+  }
+  var ALLOWS_AUTOPLAY = /(^|;)\s*autoplay(\s|$)/i;
+  function createVideoRecorder() {
+    const startedAt2 = Date.now();
+    const events = [];
+    const ids = /* @__PURE__ */ new WeakMap();
+    let nextId = 1;
+    const seen = /* @__PURE__ */ new Set();
+    const frameObservers = /* @__PURE__ */ new WeakMap();
+    const shadowRoots = /* @__PURE__ */ new WeakMap();
+    const shadowHosts = /* @__PURE__ */ new Set();
+    let listening = false;
+    let unpatchShadow = null;
+    function idOf(node2) {
+      if (!ids.has(node2)) ids.set(node2, nextId++);
+      return ids.get(node2);
+    }
+    function elapsed() {
+      return ((Date.now() - startedAt2) / 1e3).toFixed(1).padStart(7);
+    }
+    function note(kind, detail = "") {
+      const last = events[events.length - 1];
+      if (last && last.kind === kind && last.detail === detail) {
+        last.count += 1;
+        last.until = elapsed();
+        return;
+      }
+      events.push({ at: elapsed(), kind, detail, count: 1, until: null });
+      if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+    }
+    function formatEvent({ at, kind, detail, count, until }) {
+      const repeat = count > 1 ? `   x${count}, until ${until.trim()}s` : "";
+      return `${at}s  ${kind.padEnd(14)} ${detail}${repeat}`;
+    }
+    function patchAttachShadow() {
+      const proto = globalThis.Element?.prototype;
+      if (!proto?.attachShadow || proto.attachShadow.__threadcalmPatched) return;
+      const original = proto.attachShadow;
+      const wrapped = function patchedAttachShadow(init) {
+        const root = original.call(this, init);
+        try {
+          shadowRoots.set(this, root);
+          shadowHosts.add(this);
+          note("shadow", `attached (${init?.mode ?? "?"}) on ${this.tagName.toLowerCase()}`);
+        } catch {
+        }
+        return root;
+      };
+      wrapped.__threadcalmPatched = true;
+      proto.attachShadow = wrapped;
+      unpatchShadow = () => {
+        if (proto.attachShadow === wrapped) proto.attachShadow = original;
+      };
+    }
+    function scanExistingShadowRoots() {
+      let found = 0;
+      for (const element of document.getElementsByTagName("*")) {
+        if (element.shadowRoot) {
+          shadowRoots.set(element, element.shadowRoot);
+          shadowHosts.add(element);
+          found += 1;
+        }
+      }
+      if (found) note("shadow", `${found} open root(s) already present`);
+    }
+    function mediaRoots() {
+      const roots = [document];
+      for (const host of shadowHosts) {
+        if (!host.isConnected) {
+          shadowHosts.delete(host);
+          continue;
+        }
+        const root = shadowRoots.get(host);
+        if (root) roots.push(root);
+      }
+      return roots;
+    }
+    function deepQueryAll(selector) {
+      const result = [];
+      for (const root of mediaRoots()) result.push(...root.querySelectorAll(selector));
+      return result;
+    }
+    function frameSummary(frame) {
+      return `src=${redactUrl(frame.getAttribute("src"))} allow="${frame.getAttribute("allow") ?? ""}"${frame.hasAttribute("srcdoc") ? " srcdoc" : ""}${closestPost(frame) ? " in-post" : ""}${frame.closest('[role="dialog"]') ? " in-dialog" : ""} ${rectOf(frame)}`;
+    }
+    function videoSummary(video) {
+      return `muted=${video.muted} autoplay-attr=${video.hasAttribute("autoplay")} paused=${video.paused} ready=${video.readyState} preload=${video.preload || "(default)"} src=${redactUrl(video.currentSrc || video.getAttribute("src"))}${video.getRootNode() !== document ? " in-shadow" : ""}${closestPost(video) ? " in-post" : ""} ${rectOf(video)}`;
+    }
+    function track(frame) {
+      if (frameObservers.has(frame)) return;
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          const name = record.attributeName;
+          const value = frame.getAttribute(name);
+          let shown = `"${value ?? ""}"`;
+          if (name === "src") shown = redactUrl(value);
+          if (name === "srcdoc") shown = `<${value?.length ?? 0} chars>`;
+          note("frame-attr", `#${idOf(frame)} ${name} -> ${shown}`);
+        }
+      });
+      observer.observe(frame, { attributes: true, attributeFilter: ["src", "srcdoc", "allow", "sandbox"] });
+      frameObservers.set(frame, observer);
+    }
+    function inventory() {
+      for (const node2 of seen) {
+        if (!node2.isConnected) {
+          note(node2.tagName === "IFRAME" ? "frame-removed" : "video-removed", `#${idOf(node2)}`);
+          seen.delete(node2);
+          frameObservers.get(node2)?.disconnect();
+          frameObservers.delete(node2);
+        }
+      }
+      for (const frame of deepQueryAll("iframe")) {
+        if (seen.has(frame)) continue;
+        seen.add(frame);
+        note("frame-added", `#${idOf(frame)} ${frameSummary(frame)}`);
+        track(frame);
+      }
+      for (const video of deepQueryAll("video")) {
+        if (seen.has(video)) continue;
+        seen.add(video);
+        note("video-added", `#${idOf(video)} ${videoSummary(video)}`);
+      }
+    }
+    function onMediaEvent(event) {
+      const video = event.target;
+      if (video?.tagName !== "VIDEO") return;
+      note(`video-${event.type}`, `#${idOf(video)} muted=${video.muted} ready=${video.readyState} t=${(video.currentTime ?? 0).toFixed(1)}`);
+    }
+    const MEDIA_EVENTS = ["loadstart", "play", "playing", "pause"];
+    function start() {
+      if (listening) return;
+      listening = true;
+      patchAttachShadow();
+      scanExistingShadowRoots();
+      for (const type of MEDIA_EVENTS) document.addEventListener(type, onMediaEvent, true);
+      note("page", `top-window=${window.top === window.self} visibility=${document.visibilityState}`);
+      inventory();
+    }
+    function stop() {
+      if (!listening) return;
+      listening = false;
+      for (const type of MEDIA_EVENTS) document.removeEventListener(type, onMediaEvent, true);
+      for (const node2 of seen) frameObservers.get(node2)?.disconnect();
+      seen.clear();
+      unpatchShadow?.();
+    }
+    function report({ header = [], setting = "?", guard = [] } = {}) {
+      inventory();
+      const frames = deepQueryAll("iframe");
+      const videos = deepQueryAll("video");
+      const connection = navigator.connection;
+      let reducedMotion = "?";
+      try {
+        reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      } catch {
+      }
+      const lines = [
+        ...header,
+        "",
+        "video report -- structure only, no content",
+        `  setting video.autoplay: ${setting}`,
+        `  top window: ${window.top === window.self}   visibility: ${document.visibilityState}`,
+        `  viewport: ${innerWidth}x${innerHeight}   reduced motion: ${reducedMotion}`,
+        `  connection: ${connection ? `${connection.effectiveType ?? "?"} saveData=${connection.saveData}` : "not reported"}`,
+        `  shadow roots tracked: ${mediaRoots().length - 1}`,
+        `  frames: ${frames.length}   videos: ${videos.length}   autoplay-allowed frames: ${frames.filter((f) => ALLOWS_AUTOPLAY.test(f.getAttribute("allow") ?? "")).length}`
+      ];
+      if (guard.length) lines.push("", "guard:", ...guard.map((line) => `  ${line}`));
+      lines.push("", `frames (${frames.length}):`);
+      for (const frame of frames) {
+        lines.push(
+          `  #${idOf(frame)}  ${frame.getAttribute("src") == null ? "no src" : redactUrl(frame.getAttribute("src"))}`,
+          `      attrs: ${attributeSummary(frame) || "(none)"}`,
+          `      same-origin readable: ${sameOriginState(frame)}   in viewport: ${inViewport(frame)}   in post: ${Boolean(closestPost(frame))}   in dialog: ${Boolean(frame.closest('[role="dialog"]'))}`,
+          "      ancestry:",
+          ...ancestorLines(frame).map((line) => `        ${line}`)
+        );
+      }
+      lines.push("", `videos (${videos.length}):`);
+      for (const video of videos) {
+        lines.push(
+          `  #${idOf(video)}  ${videoSummary(video)}`,
+          `      attrs: ${attributeSummary(video) || "(none)"}`,
+          `      sources: ${video.querySelectorAll("source").length}   poster: ${video.hasAttribute("poster")}   network: ${video.networkState}   in viewport: ${inViewport(video)}`,
+          "      ancestry:",
+          ...ancestorLines(video).map((line) => `        ${line}`)
+        );
+      }
+      lines.push("", `timeline (${events.length} entries, seconds since the script started):`);
+      lines.push(...events.map((event) => `  ${formatEvent(event)}`));
+      lines.push("", "(end of video report)");
+      return lines.join("\n");
+    }
+    return {
+      start,
+      stop,
+      onDomChanged: inventory,
+      note,
+      idOf,
+      track,
+      mediaRoots,
+      deepQueryAll,
+      report
+    };
+  }
+
+  // src/features/video.js
+  var GESTURE_WINDOW_MS = 2e3;
+  var MAX_HOLDS = 3;
+  var RECREATION_LIMIT = 6;
+  var RECREATION_WINDOW_MS = 1e4;
+  var CHECK_INTERVAL_MS = 1e3;
+  var ACTIVATING_KEYS = /* @__PURE__ */ new Set(["Enter", " "]);
+  var PLACEHOLDER_CLASS = "tc-video-hold";
+  var HELD_FRAME_CLASS = "tc-video-frame-held";
+  var BLANK = "about:blank";
+  var CARRIED_ATTRIBUTES = ["allow", "sandbox", "allowfullscreen", "referrerpolicy", "title", "loading"];
+  var ALLOWS_AUTOPLAY2 = /(^|;)\s*autoplay(\s|$)/i;
+  var PLAYER_PATH = /embed\.aspx|stream\.aspx|videoplayer|\/video(?:\/|$)|\/player(?:\/|$)|\/embed(?:\/|$)/i;
+  var PLAYER_HOST = /\.(sharepoint(-df)?\.com|svc\.ms|sharepointonline\.com)$/i;
+  var VIDEO_HINT = /video|player|media|stream/i;
+  function nearVideoHint(frame) {
+    let node2 = frame.parentElement;
+    for (let depth = 0; node2 && depth < 8; depth += 1) {
+      const marks = `${node2.getAttribute("data-testid") ?? ""} ${node2.getAttribute("data-automationid") ?? ""} ${node2.className ?? ""} ${node2.id ?? ""}`;
+      if (VIDEO_HINT.test(marks)) return true;
+      node2 = node2.parentElement;
+    }
+    return false;
+  }
+  function classifyFrame(frame, src = frame.getAttribute("src")) {
+    const reasons = [];
+    if (ALLOWS_AUTOPLAY2.test(frame.getAttribute("allow") ?? "")) reasons.push("allow:autoplay");
+    let host = "";
+    let path = "";
+    try {
+      if (src && src !== BLANK) ({ hostname: host, pathname: path } = new URL(src, document.baseURI));
+    } catch {
+    }
+    if (PLAYER_PATH.test(path)) reasons.push("path:player");
+    if (PLAYER_HOST.test(host)) reasons.push("host:sharepoint");
+    if (nearVideoHint(frame)) reasons.push("near:video-hint");
+    if (closestPost(frame)) reasons.push("in-post");
+    const player = reasons.includes("allow:autoplay") || reasons.includes("path:player") || reasons.includes("host:sharepoint") && (reasons.includes("near:video-hint") || reasons.includes("in-post"));
+    return { player, reasons };
+  }
+  var SILENT = {
+    note() {
+    },
+    idOf: () => 0,
+    track() {
+    },
+    deepQueryAll: (selector) => [...document.querySelectorAll(selector)]
+  };
+  var FRAME_PROTO = globalThis.HTMLIFrameElement?.prototype;
+  var ORIGINAL = {
+    contentWindow: FRAME_PROTO && Object.getOwnPropertyDescriptor(FRAME_PROTO, "contentWindow"),
+    contentDocument: FRAME_PROTO && Object.getOwnPropertyDescriptor(FRAME_PROTO, "contentDocument")
+  };
+  function realContentWindow(frame) {
+    return ORIGINAL.contentWindow?.get.call(frame) ?? null;
+  }
+  function createVideoGuard({ isGenuine = (event) => event.isTrusted, recorder = SILENT } = {}) {
+    let listening = false;
+    let lastGesture = null;
+    let frameObserver = null;
+    let ticker = null;
+    let hooked = false;
+    const started2 = /* @__PURE__ */ new WeakSet();
+    const disarmed = /* @__PURE__ */ new WeakSet();
+    const heldFrames = /* @__PURE__ */ new WeakMap();
+    const releasedFrames = /* @__PURE__ */ new WeakSet();
+    const releasedPosts = /* @__PURE__ */ new WeakSet();
+    const postHolds = /* @__PURE__ */ new WeakMap();
+    const frameOfPlaceholder = /* @__PURE__ */ new WeakMap();
+    const decided = /* @__PURE__ */ new Set();
+    const decisions = /* @__PURE__ */ new WeakMap();
+    const originalSubmits = /* @__PURE__ */ new WeakMap();
+    const LOAD_GRACE_MS = 4e3;
+    const { note, idOf } = recorder;
+    function decide(frame, decision, reasons = []) {
+      decided.add(frame);
+      decisions.set(frame, { decision, reasons, at: Date.now() });
+    }
+    function covers(video, x, y) {
+      const rect = video.getBoundingClientRect();
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    }
+    function inOwnDialog(element) {
+      return Boolean(element.closest('[role="dialog"]')) && !closestPost(element);
+    }
+    function askedFor(video) {
+      if (inOwnDialog(video)) return true;
+      if (!lastGesture || Date.now() - lastGesture.at > GESTURE_WINDOW_MS) return false;
+      const { x, y, target } = lastGesture;
+      if (covers(video, x, y)) return true;
+      if (target.closest(ACTION_ROW_SELECTOR)) return false;
+      return Boolean(closestPost(video)?.contains(target));
+    }
+    function hold(video) {
+      video.pause();
+      counters.autoplaysHeld += 1;
+      note("video-held", `#${idOf(video)} paused`);
+      log.debug("held a video that started by itself");
+    }
+    function disarm(video) {
+      if (disarmed.has(video) || started2.has(video)) return;
+      disarmed.add(video);
+      const had = [];
+      if (video.hasAttribute("autoplay") || video.autoplay) {
+        video.removeAttribute("autoplay");
+        video.autoplay = false;
+        had.push("autoplay");
+      }
+      if (video.readyState === 0 && video.preload !== "none") {
+        video.preload = "none";
+        had.push("preload");
+      }
+      if (had.length) note("video-disarmed", `#${idOf(video)} ${had.join(", ")} removed`);
+    }
+    function onPlay(event) {
+      const video = event.target;
+      if (video?.tagName !== "VIDEO" || started2.has(video)) return;
+      if (askedFor(video)) {
+        started2.add(video);
+        note("video-allowed", `#${idOf(video)} asked for`);
+        return;
+      }
+      hold(video);
+    }
+    function onPointerDown(event) {
+      if (!isGenuine(event) || !(event.target instanceof Element)) return;
+      lastGesture = { at: Date.now(), x: event.clientX, y: event.clientY, target: event.target };
+    }
+    function onKeyDown(event) {
+      if (!isGenuine(event) || !ACTIVATING_KEYS.has(event.key)) return;
+      if (!(event.target instanceof Element)) return;
+      const rect = event.target.getBoundingClientRect();
+      lastGesture = {
+        at: Date.now(),
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        target: event.target
+      };
+    }
+    function allVideos() {
+      const videos = recorder.deepQueryAll("video");
+      for (const frame of recorder.deepQueryAll("iframe")) {
+        try {
+          const inner = realContentWindow(frame)?.document?.querySelectorAll("video");
+          if (inner?.length) videos.push(...inner);
+        } catch {
+        }
+      }
+      return videos;
+    }
+    function checkVideo(video) {
+      if (started2.has(video)) return;
+      if (askedFor(video)) {
+        if (!video.paused) started2.add(video);
+        return;
+      }
+      disarm(video);
+      if (!video.paused && video.muted) hold(video);
+    }
+    function clearHold(frame) {
+      const state = heldFrames.get(frame);
+      if (!state) return;
+      state.tile.remove();
+      frame.classList.remove(HELD_FRAME_CLASS);
+      heldFrames.delete(frame);
+    }
+    function postInto(frame, state) {
+      let win = null;
+      let doc = null;
+      try {
+        win = realContentWindow(frame);
+        doc = win?.document ?? null;
+      } catch {
+        doc = null;
+      }
+      if (!doc?.body) {
+        note("frame-form-posted", `#${idOf(frame)} no blank document to post from`);
+        return false;
+      }
+      const form = doc.createElement("form");
+      form.method = state.form.method;
+      form.action = state.form.action;
+      form.style.display = "none";
+      for (const [name, value] of state.form.fields) {
+        const input = doc.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        form.append(input);
+      }
+      doc.body.append(form);
+      const submit = originalSubmits.get(frame) ?? win.HTMLFormElement.prototype.submit;
+      submit.call(form);
+      note("frame-form-posted", `#${idOf(frame)} ${state.form.method} ${redactUrl(state.form.action)} from inside`);
+      return true;
+    }
+    function stillBlank(frame) {
+      try {
+        return Boolean(realContentWindow(frame)?.document);
+      } catch {
+        return false;
+      }
+    }
+    function watchLoad(frame, state) {
+      setTimeout(() => {
+        if (!frame.isConnected || !stillBlank(frame) || heldFrames.has(frame)) return;
+        note("frame-load-failed", `#${idOf(frame)} still blank after ${LOAD_GRACE_MS} ms; held again`);
+        log.warn("a video did not load after the click; offering it again");
+        releasedFrames.delete(frame);
+        placeHold(frame, { ...state, reasons: state.reasons ?? [], how: "held again after a failed load" });
+      }, LOAD_GRACE_MS);
+    }
+    function loadInto(frame, state) {
+      if (state.form) {
+        if (postInto(frame, state)) watchLoad(frame, state);
+        return;
+      }
+      if (state.srcdoc != null) frame.setAttribute("srcdoc", state.srcdoc);
+      if (state.src) frame.setAttribute("src", state.src);
+    }
+    function rebuildFrame(frame, state) {
+      const replacement = document.createElement("iframe");
+      for (const [name, value] of Object.entries(state.attributes)) replacement.setAttribute(name, value);
+      replacement.className = "tc-video-rebuilt";
+      releasedFrames.add(replacement);
+      decide(replacement, "rebuilt in the tile's place, loaded as the page would have");
+      state.tile.replaceWith(replacement);
+      loadInto(replacement, state);
+      heldFrames.delete(frame);
+      note("frame-rebuilt", `#${idOf(frame)} -> #${idOf(replacement)}`);
+      return replacement;
+    }
+    function release(frame, why, { rebuild = true } = {}) {
+      const state = heldFrames.get(frame);
+      releasedFrames.add(frame);
+      if (state && !frame.isConnected && state.tile.isConnected && (state.src || state.form) && rebuild) {
+        rebuildFrame(frame, state);
+        decide(frame, `released: ${why}, frame rebuilt`);
+        note("frame-released", `#${idOf(frame)} ${why}, rebuilt`);
+        return;
+      }
+      clearHold(frame);
+      if (state) loadInto(frame, state);
+      decide(frame, `released: ${why}`);
+      note("frame-released", `#${idOf(frame)} ${why}`);
+    }
+    function buildPlaceholder(frame, src) {
+      const load2 = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        release(frame, "clicked");
+      };
+      const link = el("a", {
+        className: "tc-video-hold-open",
+        href: src ?? "#",
+        target: "_blank",
+        rel: "noopener noreferrer",
+        text: "Open in a new tab",
+        on: { click: (event) => event.stopPropagation() }
+      });
+      const tile = el(
+        "div",
+        {
+          className: PLACEHOLDER_CLASS,
+          role: "group",
+          "aria-label": "Embedded video, not loaded to save data",
+          on: { click: load2 }
+        },
+        el("span", { className: "tc-video-hold-badge", text: "Embedded video" }),
+        el(
+          "button",
+          {
+            type: "button",
+            className: "tc-video-hold-load",
+            title: "Threadcalm kept this video from loading. Load it here, where it belongs.",
+            on: { click: load2 }
+          },
+          el("span", { className: "tc-video-hold-ring", "aria-hidden": "true" }, icon("play")),
+          el("span", { className: "tc-video-hold-label", text: "Load video here" })
+        ),
+        el("span", { className: "tc-video-hold-note", text: "Not loaded, to save data" }),
+        link,
+        el("span", { className: "tc-video-hold-by", text: "held by Threadcalm" })
+      );
+      frameOfPlaceholder.set(tile, frame);
+      return { tile, link };
+    }
+    function anchorsOf(frame) {
+      const anchors = [];
+      let node2 = frame.parentElement;
+      const post = closestPost(frame);
+      for (let depth = 0; node2 && depth < 8; depth += 1) {
+        anchors.push(node2);
+        if (node2 === post) break;
+        node2 = node2.parentElement;
+      }
+      return anchors;
+    }
+    function postRecreates(post) {
+      if (!post) return false;
+      const now = Date.now();
+      const times = (postHolds.get(post) ?? []).filter((at) => now - at < RECREATION_WINDOW_MS);
+      times.push(now);
+      postHolds.set(post, times);
+      return times.length >= RECREATION_LIMIT;
+    }
+    function placeHold(frame, { src, srcdoc = null, form = null, how, reasons }) {
+      const { tile, link } = buildPlaceholder(frame, src);
+      const attributes = {};
+      for (const name of CARRIED_ATTRIBUTES) {
+        if (frame.hasAttribute(name)) attributes[name] = frame.getAttribute(name);
+      }
+      heldFrames.set(frame, {
+        src,
+        srcdoc,
+        form,
+        tile,
+        link,
+        attributes,
+        reasons,
+        anchors: anchorsOf(frame),
+        holds: 1,
+        how
+      });
+      frame.after(tile);
+      frame.classList.add(HELD_FRAME_CLASS);
+      counters.playersNotLoaded += 1;
+      decide(frame, `held (${how})`, reasons);
+      note("frame-held", `#${idOf(frame)} ${how} ${reasons.join(" ")}`);
+      log.debug("kept an embedded player from loading");
+    }
+    function shouldIntercept(frame) {
+      if (!listening || releasedFrames.has(frame) || !frame.isConnected) return false;
+      if (frame.getAttribute("src") != null || frame.hasAttribute("srcdoc")) return false;
+      const { player } = classifyFrame(frame, null);
+      if (!player || inOwnDialog(frame)) return false;
+      const post = closestPost(frame);
+      return !(post && releasedPosts.has(post));
+    }
+    const instrumented = /* @__PURE__ */ new WeakSet();
+    function describeForm(form) {
+      const names = [...form.elements].map((element) => element.name).filter(Boolean);
+      return `${(form.method || "get").toLowerCase()} ${redactUrl(form.action)} fields=[${names.join(",")}]`;
+    }
+    function captureForm(frame, form, via) {
+      if (!heldFrames.has(frame) && !shouldIntercept(frame)) {
+        note("frame-form-seen", `#${idOf(frame)} via ${via} ${describeForm(form)} (not held)`);
+        return false;
+      }
+      const capture = {
+        action: form.action,
+        method: (form.method || "get").toLowerCase(),
+        // Values stay in memory only; they are the SDK's tokens.
+        fields: [...form.elements].filter((element) => element.name).map((element) => [element.name, element.value])
+      };
+      const state = heldFrames.get(frame);
+      if (state) {
+        state.form = capture;
+        state.src = capture.action;
+        state.link.href = capture.action;
+      } else {
+        const { reasons } = classifyFrame(frame, capture.action);
+        placeHold(frame, { src: capture.action, form: capture, how: "form submission intercepted", reasons });
+      }
+      note("frame-form-held", `#${idOf(frame)} via ${via} ${describeForm(form)}`);
+      return true;
+    }
+    function instrument(frame, real) {
+      if (!real || instrumented.has(frame)) return;
+      instrumented.add(frame);
+      note("frame-window", `#${idOf(frame)} first reached by the page`);
+      let doc = null;
+      try {
+        doc = real.document;
+      } catch {
+        note("frame-window", `#${idOf(frame)} document not readable`);
+        return;
+      }
+      if (!doc) return;
+      try {
+        const send = real.postMessage;
+        real.postMessage = function patchedPostMessage(...args) {
+          note("frame-message", `#${idOf(frame)} page -> frame`);
+          return send.apply(this, args);
+        };
+      } catch {
+      }
+      for (const method of ["open", "write", "writeln"]) {
+        const original = doc[method];
+        if (typeof original !== "function") continue;
+        doc[method] = function patchedDocumentMethod(...args) {
+          const size = method === "open" ? "" : ` <${args.join("").length} chars>`;
+          note(`frame-doc-${method}`, `#${idOf(frame)}${size}`);
+          return original.apply(this, args);
+        };
+      }
+      const formProto = real.HTMLFormElement?.prototype;
+      if (formProto?.submit) {
+        const submit = formProto.submit;
+        originalSubmits.set(frame, submit);
+        formProto.submit = function patchedSubmit() {
+          if (captureForm(frame, this, "submit()")) return void 0;
+          return submit.call(this);
+        };
+      }
+      doc.addEventListener("submit", (event) => {
+        if (event.target?.tagName === "FORM" && captureForm(frame, event.target, "submit event")) event.preventDefault();
+      }, true);
+      try {
+        new real.MutationObserver((records) => {
+          for (const record of records) {
+            for (const node2 of record.addedNodes) {
+              if (node2.nodeType !== 1) continue;
+              const tag = node2.tagName.toLowerCase();
+              let detail = "";
+              if (tag === "form") detail = ` ${describeForm(node2)}`;
+              else if (tag === "script") detail = node2.src ? ` src=${redactUrl(node2.src)}` : ` inline <${node2.textContent.length} chars>`;
+              else if (tag === "iframe") detail = ` src=${redactUrl(node2.getAttribute("src"))}`;
+              note("frame-doc-added", `#${idOf(frame)} <${tag}>${detail}`);
+            }
+          }
+        }).observe(doc, { childList: true, subtree: true });
+      } catch {
+      }
+      real.addEventListener("pagehide", () => {
+        note("frame-unload", `#${idOf(frame)} document replaced${heldFrames.has(frame) ? " while held" : ""}`);
+      }, { once: true });
+    }
+    function hook() {
+      if (hooked || !FRAME_PROTO || !ORIGINAL.contentWindow) return;
+      hooked = true;
+      Object.defineProperty(FRAME_PROTO, "contentWindow", {
+        configurable: true,
+        enumerable: ORIGINAL.contentWindow.enumerable,
+        get() {
+          const real = ORIGINAL.contentWindow.get.call(this);
+          if (real && shouldIntercept(this)) instrument(this, real);
+          return real;
+        }
+      });
+      if (ORIGINAL.contentDocument) {
+        Object.defineProperty(FRAME_PROTO, "contentDocument", {
+          configurable: true,
+          enumerable: ORIGINAL.contentDocument.enumerable,
+          get() {
+            if (shouldIntercept(this)) instrument(this, ORIGINAL.contentWindow.get.call(this));
+            return ORIGINAL.contentDocument.get.call(this);
+          }
+        });
+      }
+    }
+    function unhook() {
+      if (!hooked) return;
+      hooked = false;
+      Object.defineProperty(FRAME_PROTO, "contentWindow", ORIGINAL.contentWindow);
+      if (ORIGINAL.contentDocument) Object.defineProperty(FRAME_PROTO, "contentDocument", ORIGINAL.contentDocument);
+    }
+    function holdFrame(frame) {
+      if (releasedFrames.has(frame)) return;
+      const src = frame.getAttribute("src");
+      const srcdoc = frame.getAttribute("srcdoc");
+      const state = heldFrames.get(frame);
+      const { player, reasons } = classifyFrame(frame, src);
+      if (!player) {
+        if (!decisions.has(frame)) {
+          decide(frame, "left alone: not a player", reasons);
+          note("frame-ignored", `#${idOf(frame)} ${reasons.join(" ") || "no signal"}`);
+        }
+        return;
+      }
+      if (inOwnDialog(frame)) {
+        if (!decisions.has(frame)) decide(frame, "left alone: own dialog", reasons);
+        return;
+      }
+      const post = closestPost(frame);
+      if (post && releasedPosts.has(post)) {
+        if (!decisions.has(frame)) decide(frame, "left alone: post recreates frames", reasons);
+        return;
+      }
+      if ((src == null || src === BLANK) && srcdoc == null) {
+        if (!decisions.has(frame) && src == null) {
+          const waiting = stillBlank(frame);
+          decide(frame, waiting ? "waiting: no address yet, navigation will be intercepted" : "too late: navigated before it was seen", reasons);
+          note(waiting ? "frame-waiting" : "frame-late", `#${idOf(frame)} ${reasons.join(" ")}`);
+        }
+        return;
+      }
+      if (state) {
+        state.holds += 1;
+        if (state.holds > MAX_HOLDS) {
+          log.warn("the page keeps reloading an embedded player; leaving it alone");
+          release(frame, `address put back ${state.holds} times`);
+          return;
+        }
+        if (src && src !== BLANK) {
+          state.src = src;
+          state.link.href = src;
+        }
+        if (srcdoc != null) state.srcdoc = srcdoc;
+        note("frame-held", `#${idOf(frame)} again (${state.holds})`);
+      } else {
+        if (postRecreates(post)) {
+          releasedPosts.add(post);
+          log.warn("a post keeps creating new player frames; leaving them alone");
+          note("post-released", `#${idOf(frame)} post recreates frames`);
+          for (const held of decided) {
+            if (heldFrames.has(held) && closestPost(held) === post) release(held, "post recreates frames");
+          }
+          decide(frame, "left alone: post recreates frames", reasons);
+          return;
+        }
+        placeHold(frame, { src, srcdoc, how: "address blanked", reasons });
+      }
+      if (srcdoc != null) frame.removeAttribute("srcdoc");
+      frame.setAttribute("src", BLANK);
+    }
+    function holdFramesIn(root) {
+      if (root.tagName === "IFRAME") holdFrame(root);
+      root.querySelectorAll?.("iframe").forEach(holdFrame);
+    }
+    function placeholders() {
+      return [...document.querySelectorAll(`.${PLACEHOLDER_CLASS}`)];
+    }
+    function keepPlaceholders() {
+      for (const tile of placeholders()) {
+        const frame = frameOfPlaceholder.get(tile);
+        if (!frame || !heldFrames.has(frame)) tile.remove();
+      }
+      for (const frame of decided) {
+        const state = heldFrames.get(frame);
+        if (!state || state.tile.isConnected) continue;
+        if (frame.isConnected) {
+          frame.after(state.tile);
+        } else {
+          const anchor = state.anchors.find((node2) => node2.isConnected);
+          if (!anchor) {
+            heldFrames.delete(frame);
+            decide(frame, "dropped: frame, tile and post all gone");
+            note("frame-dropped", `#${idOf(frame)} nothing left to anchor to`);
+            continue;
+          }
+          anchor.append(state.tile);
+        }
+        note("tile-reanchored", `#${idOf(frame)}`);
+      }
+    }
+    function restoreFrames() {
+      for (const tile of placeholders()) {
+        const frame = frameOfPlaceholder.get(tile);
+        if (frame && heldFrames.has(frame)) release(frame, "setting off", { rebuild: false });
+      }
+      for (const frame of decided) releasedFrames.delete(frame);
+    }
+    function sweep() {
+      for (const video of allVideos()) checkVideo(video);
+      for (const frame of recorder.deepQueryAll("iframe")) holdFrame(frame);
+      keepPlaceholders();
+    }
+    function listen() {
+      if (listening) return;
+      listening = true;
+      hook();
+      frameObserver = new MutationObserver((records) => {
+        for (const record of records) {
+          if (record.type === "attributes") {
+            if (record.target.tagName === "IFRAME") holdFrame(record.target);
+            continue;
+          }
+          for (const node2 of record.addedNodes) {
+            if (node2.nodeType !== 1) continue;
+            holdFramesIn(node2);
+            if (node2.tagName === "VIDEO") checkVideo(node2);
+            else node2.querySelectorAll?.("video").forEach(checkVideo);
+          }
+        }
+      });
+      frameObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "srcdoc"]
+      });
+      document.addEventListener("play", onPlay, true);
+      document.addEventListener("playing", onPlay, true);
+      window.addEventListener("pointerdown", onPointerDown, true);
+      window.addEventListener("keydown", onKeyDown, true);
+      ticker = setInterval(sweep, CHECK_INTERVAL_MS);
+    }
+    function unlisten() {
+      if (!listening) return;
+      listening = false;
+      unhook();
+      frameObserver?.disconnect();
+      frameObserver = null;
+      clearInterval(ticker);
+      ticker = null;
+      document.removeEventListener("play", onPlay, true);
+      document.removeEventListener("playing", onPlay, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      lastGesture = null;
+    }
+    function apply() {
+      if (get("video.autoplay") === "manual") {
+        note("guard", "on");
+        listen();
+        sweep();
+      } else {
+        note("guard", "off");
+        unlisten();
+        restoreFrames();
+      }
+    }
+    function describeKeptForm(form) {
+      const names = form.fields.map(([name]) => name);
+      let embedKeys = "";
+      try {
+        const embed = new URL(form.action).searchParams.get("embed");
+        if (embed) embedKeys = `  embed-keys=[${Object.keys(JSON.parse(embed)).join(",")}]`;
+      } catch {
+      }
+      return `${form.method} ${redactUrl(form.action)}  fields=[${names.join(",")}]${embedKeys}`;
+    }
+    function inspect() {
+      const lines = [`mode: ${get("video.autoplay")}   listening: ${listening}   navigation hook: ${hooked}`];
+      lines.push(`videos held: ${counters.autoplaysHeld}   players kept from loading: ${counters.playersNotLoaded}`);
+      for (const frame of decided) {
+        if (!frame.isConnected && !heldFrames.has(frame)) {
+          decided.delete(frame);
+          continue;
+        }
+        const { decision, reasons } = decisions.get(frame);
+        const state = heldFrames.get(frame);
+        lines.push(
+          `frame #${idOf(frame)}: ${decision}${reasons.length ? ` [${reasons.join(" ")}]` : ""}${state ? `  holds=${state.holds} loads-by=${state.form ? "form" : "address"} tile-connected=${state.tile.isConnected} frame-connected=${frame.isConnected}` : ""}`
+        );
+        if (state?.form) lines.push(`    form: ${describeKeptForm(state.form)}`);
+      }
+      if (decided.size === 0) lines.push("no frame decided on yet");
+      return lines;
+    }
+    return {
+      start: apply,
+      stop: unlisten,
+      inspect,
+      onSettingsChanged(changed) {
+        if ("video.autoplay" in changed) apply();
+      },
+      onDomChanged() {
+        if (listening) sweep();
+      }
+    };
+  }
+
   // src/ui/panel.js
   var PANEL_ID = "tc-panel";
   var SETTINGS_ID = "tc-settings";
@@ -3588,6 +4620,9 @@
           // will actually look, not only in the manager's menu.
           textButton("Copy diagnostics", () => bus.emit(EVENTS.COPY_DIAGNOSTICS), {
             title: "Selector health and how hard the script has been working, for bug reports"
+          }),
+          textButton("Copy video report", () => bus.emit(EVENTS.COPY_VIDEO_REPORT), {
+            title: "How videos are built on this page and what was done about them, without any content, for bug reports"
           }),
           textButton(
             "Forget seen posts",
@@ -5023,6 +6058,126 @@ html.tc-chip-focus .tc-post:focus-within .tc-chip { opacity: 1; }
  */
 html.tc-no-banner [role="banner"] { display: none !important; }
 
+/*
+ * A video player kept from loading. The held frame is taken out of the flow and
+ * a tile the shape of a video takes its place -- dark, 16:9, a play ring in the
+ * middle -- so it reads as the video it is and not as a link. The tile is drawn
+ * in fixed dark colours on purpose: a video thumbnail is dark in every theme,
+ * and that is what the eye expects there. Clicking anywhere on it loads the
+ * player here; the small link underneath opens it on its own page instead.
+ */
+.tc-video-frame-held { display: none !important; }
+
+.tc-video-hold {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  padding: 16px;
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(116, 189, 179, .22), transparent 60%),
+    linear-gradient(160deg, #1d2326, #0f1416);
+  color: #f3f6f6;
+  font: 500 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+/* Film-strip edges: the one visual that says "video" without a frame of it. */
+.tc-video-hold::before,
+.tc-video-hold::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, .22) 0 6px, transparent 6px 14px);
+  opacity: .5;
+}
+.tc-video-hold::before { left: 6px; }
+.tc-video-hold::after { right: 6px; }
+
+.tc-video-hold-badge {
+  position: absolute !important;
+  top: 10px;
+  left: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.tc-video-hold-load {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tc-video-hold-load:focus-visible { outline: 2px solid #74bdb3; outline-offset: 2px; }
+
+.tc-video-hold-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 255, 255, .85);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .1);
+  transition: transform .12s ease, background .12s ease;
+}
+.tc-video-hold:hover .tc-video-hold-ring { background: rgba(255, 255, 255, .22); transform: scale(1.06); }
+.tc-video-hold-ring svg { width: 30px; height: 30px; margin-left: 3px; }
+
+.tc-video-hold-note { font-size: 12px; opacity: .8; }
+
+.tc-video-hold-open {
+  font-size: 12px;
+  color: #a9d9d2;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tc-video-hold-open:hover { color: #fff; }
+
+.tc-video-hold-by {
+  position: absolute !important;
+  right: 24px;
+  bottom: 8px;
+  font-size: 10px;
+  opacity: .5;
+}
+
+/* The player, rebuilt in the tile's place after Engage took its own frame away. */
+.tc-video-rebuilt {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .tc-video-hold-badge, .tc-video-hold-by { display: none; }
+  .tc-video-hold-ring { width: 48px; height: 48px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #tc-toasts .tc-toast,
   .tc-translate-compact,
@@ -5091,9 +6246,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.2.0.20" : "0.0.0-dev";
+  var VERSION = true ? "1.3.0.31" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "6c441f1" : "dev";
+  var BUILD = true ? "5b75faf" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -5126,6 +6281,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     addStyle(ALL_STYLES);
     const expander = createExpander({ matchers });
     const translate = createTranslateTamer({ matchers });
+    const videoRecorder = createVideoRecorder();
+    const videoGuard = createVideoGuard({ recorder: videoRecorder });
     const declutter = createDeclutterer({ matchers });
     const highlighter = createHighlighter({ matchers });
     const quietChrome = createQuietChrome();
@@ -5152,6 +6309,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       readingMode,
       expander,
       translate,
+      // Before the guard, so its record starts before the guard's first decision.
+      videoRecorder,
+      videoGuard,
       declutter,
       highlighter,
       quietChrome,
@@ -5170,6 +6330,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     bus.on(EVENTS.COPY_DIAGNOSTICS, () => {
       copyDiagnostics();
     });
+    bus.on(EVENTS.COPY_VIDEO_REPORT, () => {
+      copyVideoReport({ videoRecorder, videoGuard });
+    });
     bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
       if (MATCHER_KEYS.some((key) => key in changed)) {
         matchers = buildMatchers(interfaceLanguages().codes, customPatterns());
@@ -5180,7 +6343,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     for (const feature of features) feature.start?.();
     noticeUnsupportedLanguage();
     startSpaWatcher();
-    registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode });
+    registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard });
     log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
     setTimeout(() => {
       if (rootPosts().length === 0 && document.querySelector('[role="main"]')) {
@@ -5190,7 +6353,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       }
     }, 5e3);
   }
-  function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode }) {
+  function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard }) {
     registerMenuCommand("Settings…", () => panel.openSettings());
     registerMenuCommand("Keyboard shortcuts…", () => shortcuts.showHelp());
     registerMenuCommand("Pause / resume automatic expansion", () => {
@@ -5210,6 +6373,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     });
     registerMenuCommand("Show the Threadcalm panel", () => panel.show());
     registerMenuCommand("Copy layout diagnostics (for bug reports)", copyDiagnostics);
+    registerMenuCommand("Copy video report (for bug reports)", () => copyVideoReport({ videoRecorder, videoGuard }));
   }
   var HEALTH_SELECTORS = [
     ['[role="main"]', "main landmark"],
@@ -5220,7 +6384,11 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     [".y-fixedGridColumn", "comment containers"],
     ['[data-testid="overflow-set"]', "action rows"],
     [".tc-quiet-post", "posts tagged by Threadcalm"],
-    [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"]
+    [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"],
+    ["video", "video elements"],
+    ["iframe", "embedded frames"],
+    ['iframe[allow*="autoplay"]', "frames allowed to autoplay"],
+    [".tc-video-hold", "players waiting for a click"]
   ];
   function activityLines() {
     const stats = snapshot();
@@ -5233,6 +6401,8 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       `  ${String(stats.candidates).padStart(7)}  controls examined`,
       `  ${String(stats.layoutReads).padStart(7)}  layout reads (innerText)`,
       `  ${String(stats.layoutSkips).padStart(7)}  skipped without layout`,
+      `  ${String(stats.autoplaysHeld).padStart(7)}  videos held from autoplaying`,
+      `  ${String(stats.playersNotLoaded).padStart(7)}  embedded players kept from loading`,
       `  ${String(stats.domNodes).padStart(7)}  elements on the page now`,
       `  ${String(idle === null ? "never" : idle).padStart(7)}  seconds since the last scan`,
       "",
@@ -5240,6 +6410,19 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       "taken minutes apart. A rising element count means the page is still",
       "growing, which is expansion working rather than anything leaking."
     ];
+  }
+  async function copyVideoReport({ videoRecorder, videoGuard }) {
+    const report = videoRecorder.report({
+      header: [`Threadcalm ${VERSION} (${CHANNEL} ${BUILD})`, navigator.userAgent, `host: ${location.host}`],
+      setting: get("video.autoplay"),
+      guard: videoGuard.inspect()
+    });
+    const copied = await copyToClipboard(report);
+    bus.emit(EVENTS.TOAST, {
+      message: copied ? "Video report copied" : "Clipboard blocked — see the console",
+      tone: copied ? "info" : "warn"
+    });
+    if (!copied) log.info(report);
   }
   async function copyDiagnostics() {
     const control = document.querySelector(".tc-translate-compact, .tc-translate-hidden") ?? document.querySelector("[data-tc-title]");

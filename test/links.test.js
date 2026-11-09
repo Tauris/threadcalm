@@ -8,6 +8,7 @@ import {
   ICON_SVG,
   LINKS,
   PUBLIC_REPO,
+  RAW_FILES,
   REPOSITORY,
   SCRIPT_NAME,
   metadata,
@@ -49,7 +50,7 @@ describe('distribution channels', () => {
   it('point each channel at its own branch and file', () => {
     for (const [channel, spec] of Object.entries(CHANNELS)) {
       const meta = metadataFor(channel);
-      const expected = `${REPOSITORY}/raw/${spec.branch}/dist/${spec.file}`;
+      const expected = `${RAW_FILES}/${spec.branch}/dist/${spec.file}`;
       expect(meta.downloadURL, channel).toBe(expected);
       expect(meta.updateURL, channel).toBe(expected);
     }
@@ -59,8 +60,21 @@ describe('distribution channels', () => {
     // A beta that updated from main would quietly migrate testers onto the
     // stable build the first time main moved ahead.
     const beta = metadataFor('beta');
-    expect(beta.updateURL).toContain('/raw/beta/');
-    expect(beta.updateURL).not.toContain('/raw/main/');
+    expect(beta.updateURL).toContain('/threadcalm/beta/');
+    expect(beta.updateURL).not.toContain('/threadcalm/main/');
+  });
+
+  it('fetch from the raw file host directly, never through the github.com redirect', () => {
+    // github.com/<owner>/<repo>/raw/... redirects to raw.githubusercontent.com,
+    // and that redirect failed worldwide for hours on 2026-11-08 while the
+    // target kept serving. Installed copies must not depend on the hop.
+    for (const channel of Object.keys(CHANNELS)) {
+      const meta = metadataFor(channel);
+      for (const url of [meta.downloadURL, meta.updateURL]) {
+        expect(url, channel).toMatch(/^https:\/\/raw\.githubusercontent\.com\//);
+        expect(url, channel).not.toContain('github.com/Tauris/threadcalm/raw/');
+      }
+    }
   });
 
   it('leave the stable channel exactly as the README describes it', () => {

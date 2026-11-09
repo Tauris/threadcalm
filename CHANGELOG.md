@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.3.0] - 2026-11-09
+
+### Added
+
+- **When videos play**, in a new *Videos* settings group. Engage starts videos, muted, as they scroll
+  into view, and the default leaves that alone. *Only when I click them* saves data: Engage's video
+  player -- a frame its own code navigates as the post scrolls into view -- is not loaded until you
+  clicked. A tile the shape of a video stands in for it, marked *Embedded video*, and loads the player
+  in place; a small link opens it in a new tab instead. A plain video in the page that starts by itself
+  is paused. The layout diagnostics now report `video` elements, embedded frames, frames that may
+  autoplay, players waiting for a click, and videos and players held.
+- **Copy video report**, in the settings sheet and the manager menu: how the videos on the page are
+  built and what happened to them, with every address, name and title reduced to its shape, so it can
+  be pasted into an issue as it is.
+
+### Changed
+
+- Install and update addresses now name GitHub's raw file host directly
+  (`raw.githubusercontent.com/Tauris/threadcalm/…`) instead of `github.com/Tauris/threadcalm/raw/…`,
+  which only redirects there. On 2026-11-08 that redirect returned 504 for every repository worldwide
+  for hours while the file host kept serving; installed copies could neither update nor be reached.
+  A copy installed before this change moves to the new address with its first successful update.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added
@@ -364,6 +389,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.3.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.3.0
 [1.2.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.2.0
 [1.1.1]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.0

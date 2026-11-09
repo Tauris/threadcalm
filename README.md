@@ -28,6 +28,7 @@ including the translating.
 | **Translations you can copy** | Copying a thread translates its foreign posts first, marks each translation as such, and can add the original under it for anyone who wants to check. |
 | **Compact translation controls** | Collapses `Show translation` to a small globe that expands on hover or focus — or hides it entirely on posts already written in a language you read. |
 | **Copy as Markdown** | Copies a thread, replies nested as blockquotes, with authors, timestamps and a permalink. Plain text too. |
+| **Videos on your terms** | Engage starts videos as you scroll to them. Optionally, they load only when you click, which saves data. Off by default. |
 | **Keyboard shortcuts** | `j`/`k` to move between posts, `o` to expand, `c` to copy, `v` for an overview, `t` for automatic translation, `r` for reading mode, `?` for the list. |
 | **Reading mode** | One key for a quiet page: the action bar as a corner cluster, comment boxes and copy buttons out of sight, translate controls as an icon, promoted cards and the app bar gone. The same key hands your own settings back. |
 | **Quiet post chrome** | Optionally quiets the Like / Comment / Share bar and the inline comment and reply pills. Six modes for the bar, each trading space against movement against how much of the post is covered. Off by default. |
@@ -42,8 +43,8 @@ requests of its own. See [Privacy](#privacy).
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome, Edge, Firefox, Safari) or
    [Violentmonkey](https://violentmonkey.github.io/).
-2. Open **[dist/threadcalm.user.js](dist/threadcalm.user.js?raw=1)** — your
-   userscript manager will offer to install it.
+2. Open **[dist/threadcalm.user.js](https://raw.githubusercontent.com/Tauris/threadcalm/main/dist/threadcalm.user.js)**
+   — your userscript manager will offer to install it.
 3. Reload Viva Engage.
 
 A bottom-right panel appears once a feed loads. If it does not, see

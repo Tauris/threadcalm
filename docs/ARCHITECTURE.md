@@ -71,6 +71,8 @@ src/
     translate.js       the translation control: compacting, automatic translation, for copies
     thread.js          reading a conversation out of the DOM, rendering it
     copy.js            clipboard actions, translation marks, the per-post chip
+    video.js           optionally holding videos and players that start by themselves
+    videoreport.js     what video on the page looks like, structurally, for bug reports
     declutter.js       hiding promoted/suggested cards
     highlight.js       unanswered and not-seen-before markers
     reading.js         reading mode
@@ -188,6 +190,57 @@ the bracket in `Show original (Japanese)`, and the captured text.
 
 Copying is the one exception to "on screen": `translateForCopy()` works through every eligible post
 of the thread before it is read, under the same rules otherwise, and at most 40 per copy.
+
+## Holding videos
+
+With `video.autoplay` left at its default, `video.js` attaches no listener at all. Set to `manual`, it
+catches `play` and `playing` in the capture phase on the document, since media events do not bubble,
+and calls `pause()` on a video nobody asked for.
+
+"Asked for" is read generously, because pausing a video the reader just started is the failure to
+avoid: a trusted click or key press in the last two seconds, on the video's area or anywhere in its
+post except the action row. The script's own `.click()` calls are untrusted, so expansion and
+translation never count.
+
+Engage's player is a cross-origin iframe with autoplay permission and no `src` attribute: its SDK
+reaches into the blank frame and loads the player from inside, so no attribute observer can see the
+moment it loads (DOM-NOTES has the reports). While the setting is on, `video.js` therefore redefines
+`contentWindow` and `contentDocument` on `HTMLIFrameElement.prototype`. Every frame still gets its
+*real* window -- a `Proxy` stand-in was tried and failed the SDK's identity checks, which tore the
+frame down -- but a frame that should be held (player by `classifyFrame`, no `src`, not in a dialog of
+its own, not in a released post) is instrumented the first time the page asks for it: in the frame's
+own realm, `HTMLFormElement.prototype.submit` is wrapped and a capturing `submit` listener added, so a
+form the SDK submits in there is caught and kept (action, method, fields -- values stay in memory and
+never reach the report) instead of sent, and the tile goes up. `postMessage`, `document.open/write`,
+nodes added to the document and `pagehide` are noted, so the report shows the SDK's route even when it
+is not a form. Clicking the tile gives the frame a `name` if it has none and posts the kept form into
+it from the page, with the page's own untouched `submit`; a frame the SDK removed is rebuilt first.
+Once the setting is off, `unhook` puts the original descriptors back. All of this works because
+Tampermonkey runs the script in the page's realm -- the same fact the SPA watcher's `history` patch
+relies on.
+
+A frame that arrives with an address, or gets one, is held the older way: sent to `about:blank` and
+given a button; clicking restores the address (and `srcdoc`, if it had one).
+`classifyFrame` decides what a player is without trusting one tenant's address: autoplay permission or a
+player-shaped path on its own, a SharePoint host only together with a post or something named after
+video nearby. The frame stays in the document because React owns it, and is only hidden. The guard's
+own write of `about:blank` is ignored, which the first build got wrong -- it counted its own mutation
+records as the page fighting back and released the frame at once.
+
+Two limits keep a hold from costing more than it saves: a frame whose address is put back more than
+`MAX_HOLDS` times is released, and a post that produces `RECREATION_LIMIT` new frames within
+`RECREATION_WINDOW_MS` is left alone from then on. A plain `<video>`, in the page, in a tracked shadow
+root or in a readable frame, is disarmed before it starts (`autoplay` off, `preload` none) and paused if
+it starts muted anyway; a slow tick covers the places events do not reach. Turning the setting off
+restores every held frame.
+
+`videoreport.js` is the other half, and is always on: a cheap recorder (capture-phase media events, an
+attribute observer per frame, an inventory per DOM change, `attachShadow` wrapped so closed roots are
+found) feeding a timeline, and a report builder. The report describes every frame and video with its
+ancestry and attributes, what the guard decided, and the order things happened in. It redacts rather
+than omits: hosts to their product (`*.sharepoint.com`), paths to structural segments, query values to
+their shape, names and titles to their length. It is how someone who can see the player tells someone
+who cannot.
 
 ## Language detection
 
