@@ -71,6 +71,7 @@ export function createCopyTools({ expander, translate = null }) {
       includeTimestamps: settings.get('copy.includeTimestamps'),
       includePermalink: settings.get('copy.includePermalink'),
       includeOriginal: settings.get('copy.includeOriginal'),
+      wrapAt: settings.get('copy.wrapAt'),
     };
   }
 

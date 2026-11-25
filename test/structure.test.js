@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { allPosts, closestPost, isBodyLinkButton, isTranslationLinkButton } from '../src/core/dom.js';
+import {
+  allPosts,
+  closestPost,
+  isBodyLinkButton,
+  isTranslationLinkButton,
+  nestedPosts,
+  postContainerFor,
+  rootPosts,
+} from '../src/core/dom.js';
 import { buildMatchers } from '../src/core/i18n.js';
 import * as settings from '../src/core/settings.js';
 import { OPEN_DWELL_MS, createExpander } from '../src/features/expand.js';
-import { threadMembers } from '../src/features/thread.js';
+import { extractPost, extractThread, threadMembers } from '../src/features/thread.js';
 import { COMPACT_CLASS, TRANSLATE_DWELL_MS, createTranslateTamer } from '../src/features/translate.js';
 import { stubLayout } from './fixtures.js';
 
@@ -11,7 +19,10 @@ import { stubLayout } from './fixtures.js';
  * Engage's post, as the round-2 survey found it in English, Japanese and
  * Portuguese alike: the body text in a `contentStateBodyTextWrapper-*` block
  * with "see more" inside it, then a row holding only the translation control,
- * then the action row. Both controls are `button > span.y-fakeLink`.
+ * then the action row. Both controls are `button > span.y-fakeLink`; since
+ * November 2026 the translation control is a `button.fui-Link` with a bare
+ * text label instead, which the last block below covers for both controls,
+ * should "see more" follow.
  *
  * The labels are deliberately in no language Threadcalm has a word list for
  * (the matchers below know English only), so every test here passes on
@@ -20,9 +31,16 @@ import { stubLayout } from './fixtures.js';
 const FRENCH_BODY =
   'Nous avons decide que la publication sera reportee a la fin du mois pour que tous les problemes qui restent puissent etre corriges.';
 
-function inlineLink(label) {
+function inlineLink(label, shape = 'fakeLink') {
   const button = document.createElement('button');
   button.type = 'button';
+  if (shape === 'fluent') {
+    // As seen in November 2026: the component's class among hashed ones, the
+    // label a bare text node.
+    button.className = 'fui-Link ___52mpgl0 f2hkw1w f3rmtva f1ewtqcl';
+    button.textContent = label;
+    return button;
+  }
   button.className = 'link-170';
   const span = document.createElement('span');
   span.className = 'y-fakeLink';
@@ -31,7 +49,13 @@ function inlineLink(label) {
   return button;
 }
 
-function engagePost({ body = FRENCH_BODY, seeMore = 'zzz mehrzz', translate = 'qqq trnslt', className = 'qaThreadStarter' } = {}) {
+function engagePost({
+  body = FRENCH_BODY,
+  seeMore = 'zzz mehrzz',
+  translate = 'qqq trnslt',
+  className = 'qaThreadStarter',
+  shape = 'fakeLink',
+} = {}) {
   const post = document.createElement('div');
   post.className = className;
 
@@ -40,13 +64,13 @@ function engagePost({ body = FRENCH_BODY, seeMore = 'zzz mehrzz', translate = 'q
   const text = document.createElement('div');
   text.textContent = body;
   bodyWrapper.append(text);
-  const more = seeMore ? inlineLink(seeMore) : null;
+  const more = seeMore ? inlineLink(seeMore, shape) : null;
   if (more) bodyWrapper.append(more);
   post.append(bodyWrapper);
 
   const translateRow = document.createElement('div');
   translateRow.className = 'y-block';
-  const translation = translate ? inlineLink(translate) : null;
+  const translation = translate ? inlineLink(translate, shape) : null;
   if (translation) translateRow.append(translation);
   post.append(translateRow);
 
@@ -413,5 +437,231 @@ describe('overview', () => {
     expander.onSettingsChanged({ 'expand.overview': false });
     vi.advanceTimersByTime(settings.get('expand.scanDelayMs') * 4);
     expect(replies).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the Fluent link button of November 2026', () => {
+  let tamer;
+
+  afterEach(() => {
+    tamer?.stop();
+    vi.useRealTimers();
+  });
+
+  it('is told apart by position like the old one', () => {
+    const { more, translation } = engagePost({ shape: 'fluent' });
+    expect(more.querySelector('span')).toBe(null);
+    expect(isBodyLinkButton(more)).toBe(true);
+    expect(isTranslationLinkButton(more)).toBe(false);
+    expect(isTranslationLinkButton(translation)).toBe(true);
+    expect(isBodyLinkButton(translation)).toBe(false);
+  });
+
+  it('still needs the component class: a plain button in the same place is nothing', () => {
+    const { translation } = engagePost({ shape: 'fluent' });
+    translation.className = '___52mpgl0 f2hkw1w';
+    expect(isTranslationLinkButton(translation)).toBe(false);
+  });
+
+  it('is not a counter: a label that starts with a digit is left alone', () => {
+    const { translation } = engagePost({ shape: 'fluent', translate: '3 rplzz' });
+    expect(isTranslationLinkButton(translation)).toBe(false);
+  });
+
+  it('still ignores one that opens something', () => {
+    const { translation } = engagePost({ shape: 'fluent' });
+    translation.setAttribute('aria-haspopup', 'menu');
+    expect(isTranslationLinkButton(translation)).toBe(false);
+  });
+
+  it('opens "see more" in a language without a word list', () => {
+    const { post, more } = engagePost({ shape: 'fluent' });
+    const clicks = vi.fn(() => {
+      more.textContent = 'zzz wenigerzz';
+    });
+    more.addEventListener('click', clicks);
+    const expander = createExpander({ matchers });
+    expect(expander.expandWithin(post)).toBe(1);
+    expect(expander.expandWithin(post)).toBe(0);
+    expect(clicks).toHaveBeenCalledTimes(1);
+  });
+
+  it('compacts the translation control in a language without a word list', () => {
+    const { translation } = engagePost({ shape: 'fluent' });
+    tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });
+    tamer.start();
+    expect(translation.classList.contains(COMPACT_CLASS)).toBe(true);
+    expect(translation.getAttribute('data-tc-title')).toBe('qqq trnslt');
+  });
+
+  it('reads the translated state from the brackets of a bare text label', () => {
+    const { post, translation } = engagePost({ shape: 'fluent' });
+    tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });
+    tamer.start();
+    expect(tamer.translationOf(post)).toBe(null);
+    translation.textContent = 'qqq orgnl (Fransk)';
+    expect(tamer.translationOf(post)).toMatchObject({ from: 'Fransk' });
+  });
+
+  it('compacts a control that is only an icon, by its position', () => {
+    const { translation } = engagePost({ shape: 'fluent' });
+    translation.textContent = '';
+    translation.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+    tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });
+    tamer.start();
+    expect(translation.classList.contains(COMPACT_CLASS)).toBe(true);
+  });
+
+  it('leaves an icon-only button alone anywhere else', () => {
+    const { post, translation } = engagePost({ shape: 'fluent' });
+    const icon = document.createElement('button');
+    icon.className = 'fui-Link';
+    icon.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+    post.append(icon); // after the action row
+    tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });
+    tamer.start();
+    expect(icon.classList.contains(COMPACT_CLASS)).toBe(false);
+    expect(translation.classList.contains(COMPACT_CLASS)).toBe(true);
+  });
+});
+
+/**
+ * The comment layout of late 2026: replies are `.qaThreadReply` speech bubbles
+ * beside the starter inside one `.qaFeedThread`, each with its own body
+ * wrapper, translation row and action row, the controls ten levels deep.
+ */
+const REPLY_BODY = 'Oui, et la migration des donnees est comprise dans ce delai, comme convenu la semaine derniere.';
+
+function column() {
+  const node = document.createElement('div');
+  node.className = 'y-fixedGridColumn ___c1';
+  return node;
+}
+
+function bubbleThread({ columns = false } = {}) {
+  const feed = document.createElement('div');
+  feed.className = 'qaFeedThread';
+  const { post: starter } = engagePost({ shape: 'fluent' });
+  if (columns) {
+    // The speech-bubble layout wraps the starter's body in a grid column, and
+    // the reply's action row in another: columns, not posts.
+    const wrap = column();
+    const bodyWrapper = starter.querySelector('[class*="contentStateBodyTextWrapper"]');
+    bodyWrapper.replaceWith(wrap);
+    wrap.append(bodyWrapper);
+  }
+  feed.append(starter);
+
+  const reply = document.createElement('div');
+  reply.className = 'qaThreadReply ___r1';
+  let node = reply;
+  for (let i = 0; i < 6; i += 1) {
+    const inner = document.createElement('div');
+    inner.className = i % 2 ? 'y-block' : '';
+    node.append(inner);
+    node = inner;
+  }
+  const body = document.createElement('div');
+  body.className = 'y-block contentStateBodyTextWrapper-77';
+  body.append(Object.assign(document.createElement('div'), { textContent: REPLY_BODY }));
+  const translateRow = document.createElement('div');
+  translateRow.className = 'y-block';
+  const control = inlineLink('qqq trnslt', 'fluent');
+  translateRow.append(control);
+  const actions = document.createElement('div');
+  actions.setAttribute('data-testid', 'overflow-set');
+  actions.append(document.createElement('button'));
+  if (columns) {
+    const wrap = column();
+    wrap.append(actions);
+    node.append(body, translateRow, wrap);
+  } else {
+    node.append(body, translateRow, actions);
+  }
+  feed.append(reply);
+
+  document.querySelector('[role="main"]').append(feed);
+  return { starter, reply, control };
+}
+
+describe('replies drawn as speech bubbles', () => {
+  let tamer;
+
+  afterEach(() => {
+    tamer?.stop();
+    vi.useRealTimers();
+  });
+
+  it('resolve as posts of their own, beside the starter', () => {
+    const { starter, reply, control } = bubbleThread();
+    expect(closestPost(control)).toBe(reply);
+    expect(allPosts()).toEqual([starter, reply]);
+    expect(rootPosts()).toEqual([starter, reply]);
+  });
+
+  it('are not posts without an action row inside', () => {
+    const { reply, control } = bubbleThread();
+    reply.querySelector('[data-testid="overflow-set"]').remove();
+    expect(closestPost(control)).toBe(null);
+  });
+
+  it('have their translation control recognised by position', () => {
+    const { control } = bubbleThread();
+    expect(isTranslationLinkButton(control)).toBe(true);
+    tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });
+    tamer.start();
+    expect(control.classList.contains(COMPACT_CLASS)).toBe(true);
+  });
+
+  it('belong to the starter\'s thread when copied', () => {
+    const { starter, reply } = bubbleThread();
+    expect(threadMembers(starter)).toEqual([starter, reply]);
+    expect(threadMembers(reply)).toEqual([starter, reply]);
+  });
+});
+
+describe('grid columns inside posts, as the speech-bubble layout draws them', () => {
+  it('are not nested posts: nothing inside a starter with one action row is', () => {
+    const { starter, reply } = bubbleThread({ columns: true });
+    expect(starter.querySelectorAll('.y-fixedGridColumn')).toHaveLength(1);
+    expect(nestedPosts(starter)).toEqual([]);
+    expect(nestedPosts(reply)).toEqual([]);
+  });
+
+  it('do not stand in for the reply whose action row they wrap', () => {
+    const { starter, reply } = bubbleThread({ columns: true });
+    const row = reply.querySelector('[data-testid="overflow-set"]');
+    expect(postContainerFor(row)).toBe(reply);
+    expect(allPosts()).toEqual([starter, reply]);
+  });
+
+  it('leave the bodies in a copied thread', () => {
+    const { starter } = bubbleThread({ columns: true });
+    const thread = extractThread(threadMembers(starter));
+    expect(thread.body).toContain('reportee a la fin du mois');
+    expect(thread.replies).toHaveLength(1);
+    expect(thread.replies[0].body).toContain('migration des donnees');
+    expect(thread.body).not.toContain('migration des donnees');
+  });
+
+  it('still count a nested reply as a post in the layout that nests them', () => {
+    // The older layout: a reply column inside the starter, each with its own row.
+    const { post: starter } = engagePost({ translate: null });
+    const replyColumn = column();
+    replyColumn.append(Object.assign(document.createElement('p'), { textContent: REPLY_BODY }));
+    const row = document.createElement('div');
+    row.setAttribute('data-testid', 'overflow-set');
+    replyColumn.append(row);
+    starter.append(replyColumn);
+    const own = starter.querySelector(':scope > [data-testid="overflow-set"]');
+
+    expect(nestedPosts(starter)).toEqual([replyColumn]);
+    expect(postContainerFor(row)).toBe(replyColumn);
+    expect(postContainerFor(own)).toBe(starter);
+    const post = extractPost(starter);
+    expect(post.body).toContain('reportee a la fin du mois');
+    expect(post.body).not.toContain('migration des donnees');
+    expect(post.replies).toHaveLength(1);
+    expect(post.replies[0].body).toContain('migration des donnees');
   });
 });

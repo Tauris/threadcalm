@@ -11,7 +11,12 @@
  * exposes one. It is a reading aid, not a sync feature: it never leaves the
  * browser and is wiped by "reset settings".
  */
-import { POST_SELECTOR, accessibleTexts, debounce, rootPosts } from '../core/dom.js';
+import {
+  accessibleTexts,
+  debounce,
+  nestedPosts,
+  rootPosts,
+} from '../core/dom.js';
 import { getValue, setValue } from '../core/gm.js';
 import { log } from '../core/logger.js';
 import * as settings from '../core/settings.js';
@@ -53,7 +58,7 @@ export function createHighlighter({ matchers }) {
    * expanded yet.
    */
   function hasReplies(article) {
-    if (article.querySelector(POST_SELECTOR)) return true;
+    if (nestedPosts(article).length > 0) return true;
     if (!active.replyCount) return false;
 
     for (const element of article.querySelectorAll('span, button, a, [role="button"]')) {

@@ -24,6 +24,7 @@ import { createCopyTools } from './features/copy.js';
 import { createDeclutterer } from './features/declutter.js';
 import { createExpander } from './features/expand.js';
 import { createHighlighter } from './features/highlight.js';
+import { containerSurveyLines, copyDryRunLines, linkButtonLines } from './features/linkreport.js';
 import { createQuietChrome } from './features/quiet.js';
 import { snapshot } from './core/stats.js';
 import { createReadingMode } from './features/reading.js';
@@ -148,7 +149,7 @@ function main() {
 
   bus.on(EVENTS.NAVIGATE, (payload) => dispatch('onNavigate', payload));
   bus.on(EVENTS.DOM_CHANGED, () => dispatch('onDomChanged'));
-  bus.on(EVENTS.COPY_DIAGNOSTICS, () => { copyDiagnostics(); });
+  bus.on(EVENTS.COPY_DIAGNOSTICS, () => { copyDiagnostics({ matchers: () => matchers, videoRecorder }); });
   bus.on(EVENTS.COPY_VIDEO_REPORT, () => { copyVideoReport({ videoRecorder, videoGuard }); });
 
   bus.on(EVENTS.SETTINGS_CHANGED, ({ changed }) => {
@@ -164,7 +165,9 @@ function main() {
   noticeUnsupportedLanguage();
 
   startSpaWatcher();
-  registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard });
+  registerMenuCommands({
+    expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard, matchers: () => matchers,
+  });
 
   log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
 
@@ -181,7 +184,9 @@ function main() {
   }, 5000);
 }
 
-function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard }) {
+function registerMenuCommands({
+  expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard, matchers,
+}) {
   registerMenuCommand('Settings…', () => panel.openSettings());
   registerMenuCommand('Keyboard shortcuts…', () => shortcuts.showHelp());
 
@@ -206,7 +211,7 @@ function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMo
 
   registerMenuCommand('Show the Threadcalm panel', () => panel.show());
 
-  registerMenuCommand('Copy layout diagnostics (for bug reports)', copyDiagnostics);
+  registerMenuCommand('Copy layout diagnostics (for bug reports)', () => copyDiagnostics({ matchers, videoRecorder }));
   registerMenuCommand('Copy video report (for bug reports)', () => copyVideoReport({ videoRecorder, videoGuard }));
 }
 
@@ -222,6 +227,7 @@ const HEALTH_SELECTORS = [
   ['[role="article"], article', 'semantic posts'],
   ['.qaThreadStarter', 'thread starter'],
   ['.y-fixedGridColumn', 'comment containers'],
+  ['.qaThreadReply', 'replies (speech bubbles)'],
   ['[data-testid="overflow-set"]', 'action rows'],
   ['.tc-quiet-post', 'posts tagged by Threadcalm'],
   ['.tc-translate-compact, .tc-translate-hidden', 'translate controls handled'],
@@ -291,7 +297,12 @@ async function copyVideoReport({ videoRecorder, videoGuard }) {
   if (!copied) log.info(report);
 }
 
-async function copyDiagnostics() {
+/**
+ * @param {object} options
+ * @param {() => object} options.matchers the current label matchers
+ * @param {{ deepQueryAll: (selector: string) => Element[] }} options.videoRecorder
+ */
+async function copyDiagnostics({ matchers, videoRecorder }) {
   const control =
     document.querySelector('.tc-translate-compact, .tc-translate-hidden') ??
     document.querySelector('[data-tc-title]');
@@ -322,6 +333,12 @@ async function copyDiagnostics() {
   );
   lines.push('', `posts resolved: ${rootPosts().length}`);
   lines.push(...activityLines(), '');
+
+  // Every link-styled button, the unrecognised ones first: the question a
+  // missed "see more" or translation control always comes down to.
+  lines.push(...containerSurveyLines({ deepQueryAll: videoRecorder.deepQueryAll }), '');
+  lines.push(...copyDryRunLines(), '');
+  lines.push(...linkButtonLines({ matchers: matchers(), deepQueryAll: videoRecorder.deepQueryAll }), '');
 
   if (!control) {
     lines.push('No translate control found on this page.');

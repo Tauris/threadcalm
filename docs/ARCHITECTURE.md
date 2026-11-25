@@ -19,9 +19,9 @@ Three rules fall out of that, and every module obeys them:
    towards "no match" rather than a wrong click:
 
    - the reply counter's inline glyph ([DOM-NOTES.md](DOM-NOTES.md#the-reply-glyph));
-   - Engage's link-styled button, `button > span.y-fakeLink`: inside the post body it is
-     `See more`, between the body and the action row it is the translation control
-     ([DOM-NOTES.md](DOM-NOTES.md#inline-link-buttons));
+   - Engage's link-styled button, `button > span.y-fakeLink` or `button.fui-Link` (the
+     translation control's shape since November 2026): inside the post body it is `See more`,
+     between the body and the action row it is the translation control ([DOM-NOTES.md](DOM-NOTES.md#inline-link-buttons));
    - `.qaThreadStarter`, which marks exactly one thing and so counts as a post on its own.
 2. **Never mutate Engage's DOM.** Features add a class or a data attribute and let CSS do the rest.
    A React re-render discards anything injected into a component's subtree, and rewriting nodes

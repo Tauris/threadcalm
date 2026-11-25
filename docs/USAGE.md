@@ -343,6 +343,13 @@ We are moving the release to the end of the month.
 
 Plain text indents them instead. Authors, timestamps and the permalink are each switchable.
 
+A paragraph comes out of Engage as one long line, which is tiresome to read before it is rendered.
+**Wrap Markdown lines at** (80 characters by default) breaks paragraphs at spaces, blockquote
+markers included. Markdown joins the lines of a paragraph with spaces, so the rendered result is the
+same; a word that Markdown would read as syntax at the start of a line, such as `-` or `2.`, is
+never put there. Set it to 0 for destinations that turn every line break into a new line -- GitHub
+comments, a chat message -- where a wrapped paragraph would come out as short choppy lines.
+
 ### Translated posts
 
 **A translation is always marked.** On the page, `Show original (Japanese)` tells you a post is not
@@ -478,6 +485,7 @@ Everything below is in the settings sheet, grouped as shown, and stored locally.
 | Include the thread link | on |
 | Include timestamps | on |
 | Include the original under translated posts | off |
+| Wrap Markdown lines at (characters) | 80 |
 | Copy buttons on posts | Show when I point at a post |
 | Where the copy buttons sit | Top right |
 | Keyboard shortcuts | on |
@@ -519,6 +527,13 @@ is the one that means anything.
 wording, and your Engage language may have no pack yet: Threadcalm will have said so, and
 *Copy layout diagnostics* shows it. Add a pattern under *Advanced* meanwhile, and please report the
 language.
+
+**A translation control or `See more` is missed on some posts only.** Engage draws these as
+link-styled buttons and has redrawn them before; a post type it lays out differently -- a comment
+in a speech bubble, say -- may put the button where the position check does not look. *Copy layout
+diagnostics* lists every link-styled button on the page, the unrecognised ones first, with the
+length of its label, which check knew it, the post it sits in and the shape of its ancestors. No
+words, titles or addresses are included, so the report can go into an issue as it is.
 
 **Nothing expands at all, in any language.** Engage may have changed its reply glyph. The path
 prefix lives in *Reply icon signatures* under *Advanced* and can be corrected there without waiting

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { countPosts, extractPost, postIdentity, renderThread } from '../src/features/thread.js';
+import { countPosts, extractPost, postIdentity, renderThread, wrapLine } from '../src/features/thread.js';
 import { createPost, stubLayout } from './fixtures.js';
 
 beforeEach(() => {
@@ -113,6 +113,58 @@ describe('renderThread', () => {
   it('never emits more than one blank line in a row', () => {
     const post = extractPost(mount(THREAD));
     expect(renderThread(post)).not.toMatch(/\n{3}/);
+  });
+
+  it('soft-wraps long paragraphs, inside blockquotes too, without changing what renders', () => {
+    const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const post = extractPost(mount({
+      author: 'Ada Lovelace',
+      body: long,
+      replies: [{ author: 'Grace Hopper', body: long, replies: [{ author: 'Alan Turing', body: long }] }],
+    }));
+    const markdown = renderThread(post, { includePermalink: false, includeTimestamps: false, wrapAt: 60 });
+    const lines = markdown.split('\n');
+    expect(lines.every((line) => line.length <= 60)).toBe(true);
+    expect(lines.filter((line) => line.startsWith('> > word'))).not.toHaveLength(0);
+
+    // Rendered, a paragraph is its lines joined by spaces: every body comes back whole.
+    const paragraph = (prefix) =>
+      lines
+        .filter((line) => line.startsWith(`${prefix}word`))
+        .map((line) => line.slice(prefix.length))
+        .join(' ');
+    expect(paragraph('')).toBe(long);
+    expect(paragraph('> ')).toBe(long);
+    expect(paragraph('> > ')).toBe(long);
+  });
+
+  it('leaves paragraphs whole by default and when the width is 0', () => {
+    const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const post = extractPost(mount({ author: 'Ada', body: long }));
+    expect(renderThread(post, { includePermalink: false })).toContain(long);
+    expect(renderThread(post, { includePermalink: false, wrapAt: 0 })).toContain(long);
+  });
+});
+
+describe('wrapLine', () => {
+  it('breaks at spaces within the width, prefix included', () => {
+    expect(wrapLine('aaa bbb ccc ddd', 9, '> ')).toEqual(['> aaa bbb', '> ccc ddd']);
+    expect(wrapLine('aaa bbb', 80)).toEqual(['aaa bbb']);
+    expect(wrapLine('aaa bbb ccc', 0)).toEqual(['aaa bbb ccc']);
+  });
+
+  it('never starts a line with a word Markdown would read as syntax', () => {
+    expect(wrapLine('see item - the second one', 10)).toEqual(['see item -', 'the second', 'one']);
+    expect(wrapLine('version 2. is out now', 10)).toEqual(['version 2.', 'is out now']);
+    expect(wrapLine('versions 2. and 3.', 9)).toEqual(['versions 2.', 'and 3.']);
+    expect(wrapLine('tag it # and > go', 7)).toEqual(['tag it #', 'and >', 'go']);
+    expect(wrapLine('aaaa bbbb 1) cccc', 9)).toEqual(['aaaa bbbb 1)', 'cccc']);
+    expect(wrapLine('aaaa bbbb --- cccc', 9)).toEqual(['aaaa bbbb ---', 'cccc']);
+    expect(wrapLine('aaaa bbbb -x cccc', 9)).toEqual(['aaaa bbbb', '-x cccc']);
+  });
+
+  it('lets a word longer than the width stand alone', () => {
+    expect(wrapLine('a verylongwordindeed b', 8)).toEqual(['a', 'verylongwordindeed', 'b']);
   });
 });
 

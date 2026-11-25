@@ -18,10 +18,10 @@
  */
 import {
   ACTION_ROW_SELECTOR,
-  POST_SELECTOR,
   STARTER_SELECTOR,
   allPosts,
   isVisible,
+  nestedPosts,
   normalizeText,
   visibleText,
 } from '../core/dom.js';
@@ -170,8 +170,11 @@ function extractPermalink(article) {
 export function extractBody(article) {
   const clone = article.cloneNode(true);
 
+  // Nested replies first, handled separately -- and only real ones: a layout
+  // column that merely wraps the body is not a reply (see nestedPosts).
+  for (const nested of nestedPosts(clone)) nested.remove();
+
   const strip = [
-    POST_SELECTOR,          // nested replies, handled separately
     ACTION_ROW_SELECTOR,    // the whole Like/Comment/Share row in one go
     'button', '[role="button"]', '[role="toolbar"]', '[role="menu"]',
     '[role="menubar"]', 'nav', 'time', '[aria-hidden="true"]',
@@ -212,7 +215,7 @@ export function extractBody(article) {
 
 /** Direct reply articles of a post — not the replies of its replies. */
 function directReplies(article) {
-  const nested = [...article.querySelectorAll(POST_SELECTOR)].filter(isVisible);
+  const nested = nestedPosts(article).filter(isVisible);
   return nested.filter(
     (candidate) => !nested.some((other) => other !== candidate && other.contains(candidate)),
   );
@@ -375,6 +378,50 @@ export function countPosts(post) {
 }
 
 /**
+ * A word that would be read as Markdown syntax at the start of a line: a
+ * heading, a quote, a list item, a table row or a rule. A soft wrap must never
+ * put one there, or the paragraph changes shape when rendered.
+ */
+const LINE_START_SYNTAX = /^(?:[#>|]|[-+*]|[-=_]{3,}|\d{1,9}[.)]|```|~~~)$/;
+
+/**
+ * Soft-wraps one paragraph of Markdown for reading in the raw.
+ *
+ * Markdown joins the lines of a paragraph with spaces, so breaking a long
+ * line at spaces changes nothing in the rendered result -- as long as no
+ * continuation line begins with something Markdown reads as syntax. A word
+ * that would is kept on the line before, which then runs long. Words longer
+ * than the width stand alone. `prefix` is what every line carries (the
+ * blockquote markers) and counts towards the width.
+ *
+ * @param {string} line a paragraph, without line breaks
+ * @param {number} width 0 leaves the paragraph on one line
+ * @param {string} [prefix]
+ * @returns {string[]}
+ */
+export function wrapLine(line, width, prefix = '') {
+  if (!width || width <= 0 || prefix.length + line.length <= width) return [`${prefix}${line}`];
+
+  const lines = [];
+  let current = '';
+  for (const word of line.split(' ')) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+    const fits = prefix.length + current.length + 1 + word.length <= width;
+    if (fits || LINE_START_SYNTAX.test(word)) {
+      current += ` ${word}`;
+    } else {
+      lines.push(`${prefix}${current}`);
+      current = word;
+    }
+  }
+  if (current) lines.push(`${prefix}${current}`);
+  return lines;
+}
+
+/**
  * Renders an extracted thread.
  *
  * Replies become nested blockquotes in Markdown and indented blocks in plain
@@ -386,6 +433,8 @@ export function countPosts(post) {
  * @param {'markdown'|'text'} [options.format]
  * @param {boolean} [options.includeTimestamps]
  * @param {boolean} [options.includePermalink]
+ * @param {boolean} [options.includeOriginal]
+ * @param {number} [options.wrapAt] soft-wrap Markdown paragraphs at this many characters; 0 leaves them whole
  * @param {string} [options.sourceUrl]
  */
 export function renderThread(post, options = {}) {
@@ -394,6 +443,7 @@ export function renderThread(post, options = {}) {
     includeTimestamps = true,
     includePermalink = true,
     includeOriginal = false,
+    wrapAt = 0,
     sourceUrl = location.href,
   } = options;
 
@@ -420,21 +470,28 @@ export function renderThread(post, options = {}) {
         return;
       }
       lines.push(`${prefix}*Original:*`, prefix.trimEnd());
-      for (const line of entry.translation.original.split('\n')) lines.push(`${prefix}${line}`);
+      paragraphs(entry.translation.original, prefix);
       lines.push(prefix.trimEnd());
     };
 
+    // Each line of a body is a paragraph; wrapped for reading in the raw,
+    // which renders the same.
+    const paragraphs = (body, prefix) => {
+      for (const line of body.split('\n')) lines.push(...wrapLine(line, wrapAt, prefix));
+    };
+
     lines.push(`## ${post.author}${stamp(post)}`, '');
-    if (post.body) lines.push(post.body, '');
+    if (post.body) {
+      paragraphs(post.body, '');
+      lines.push('');
+    }
     translation(post, '');
 
     const walk = (entry, depth) => {
       const prefix = '> '.repeat(depth);
       lines.push(`${prefix}**${entry.author}**${stamp(entry)}`);
       lines.push(prefix.trimEnd());
-      for (const line of entry.body.split('\n')) {
-        lines.push(`${prefix}${line}`);
-      }
+      paragraphs(entry.body, prefix);
       lines.push(prefix.trimEnd());
       translation(entry, prefix);
       for (const child of entry.replies) walk(child, depth + 1);

@@ -348,6 +348,15 @@ export const SCHEMA = [
     help: 'Copied translations are always marked as such. With this on, the text as its author wrote it follows, so whoever reads the copy can check the translation. Doubles the length of those posts.',
   },
   {
+    key: 'copy.wrapAt',
+    type: 'number',
+    default: 80,
+    min: 0,
+    max: 500,
+    label: 'Wrap Markdown lines at (characters)',
+    help: 'A paragraph is one long line as Engage renders it. Markdown joins the lines of a paragraph with spaces, so breaking it at this width reads well raw and renders the same. 0 keeps each paragraph on one line, for destinations that turn every line break into a new line, such as GitHub comments or a chat message.',
+  },
+  {
     key: 'copy.showButtons',
     type: 'select',
     default: 'hover',

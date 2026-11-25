@@ -7,6 +7,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-25
+
+### Added
+
+- **Wrap Markdown lines at** (80 characters), under *Copying*: a copied paragraph is soft-wrapped at
+  spaces, blockquote markers included, so the raw Markdown reads well. Markdown joins a paragraph's
+  lines with spaces, so nothing changes when it is rendered, and no line is ever started with a
+  word Markdown would read as syntax. 0 keeps paragraphs whole, for destinations that turn every
+  line break into a new line.
+- **Copy layout diagnostics** now lists every link-styled button on the page, the unrecognised ones
+  first: its shape, the length of its label, which word list or position check knew it, the post
+  it was found in, and the shape of its ancestors. No words, titles or addresses are included. It
+  answers, from a page that cannot be inspected from outside, why a `See more` or translation
+  control was missed. A survey of Engage's named containers (`qaThreadStarter`, `qaThreadReply`…)
+  comes with it: how many there are, which resolve as posts, and which hold an action row, a body
+  wrapper or link buttons. Each button also shows the shape of its label (letters as `a`, digits
+  as `9`), its attribute names and its children, so an icon drawn in place of a label can be told
+  from a label in an unknown wording. A dry run of copying the first thread on the page gives the
+  size of every member's author and body, its nested posts and layout columns, and nothing of
+  the text.
+
+### Fixed
+
+- Engage redrew its translation control in November 2026: a Fluent link with a bare text label
+  instead of a `span.y-fakeLink`. In English and the other languages with a word list nothing
+  changed, since wording is matched first; in every other interface language the structural
+  recognition had stopped, so the control was no longer compacted or pressed by automatic
+  translation. Both shapes are recognised now, for `See more` too should it follow, and a
+  translation control that is only an icon, with no label at all, is recognised by its position.
+- Copying a thread in the speech-bubble layout produced author lines without their text. Engage
+  there uses `.y-fixedGridColumn`, the class that marks a nested reply in the older layout, for
+  plain layout columns inside a post too -- one around the body -- and every such column was
+  stripped from the copy as if it were a reply. A column now counts as a nested post only when it
+  owns an action row of its own; the same rule tells the reply's own container from the column
+  around its action row. Language detection and the reply highlighting follow the same rule.
+- Replies drawn as speech bubbles (`qaThreadReply`, the comment layout of late 2026) resolve as
+  posts. Before, a reply's translation control belonged to no post, so automatic translation could
+  not judge its language and *Only unknown languages* could not hide it, and a copied thread took
+  the reply from whatever element happened to wrap its action row.
+
 ## [1.3.0] - 2026-11-09
 
 ### Added
@@ -389,6 +429,7 @@ First public release.
 - Test suite (Vitest + jsdom), ESLint configuration, an esbuild build, and CI that fails if the
   committed `dist/` bundle is stale.
 
+[1.4.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.4.0
 [1.3.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.3.0
 [1.2.0]: https://github.com/Tauris/threadcalm/releases/tag/v1.2.0
 [1.1.1]: https://github.com/Tauris/threadcalm/releases/tag/v1.1.1

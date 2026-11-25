@@ -20,8 +20,9 @@ The dependable handles, best first:
 | `.qaContentMainColumn` | the main content column |
 | `.qaThreadStarter` | the thread-starter post |
 | `.y-fixedGridColumn` | a nested comment or reply |
+| `.qaThreadReply` | a reply in the comment layout of late 2026, a speech bubble beside the starter, with its own action row, body wrapper and translation control |
 | `[class*="contentStateBodyTextWrapper"]` | a post's body text (the class has a generated suffix) |
-| `button > span.y-fakeLink` | Engage's link-styled inline button |
+| `button > span.y-fakeLink`, `button.fui-Link` | Engage's link-styled inline button, old and new |
 
 The ARIA landmarks and the test id are meaningful names and are treated as the primary API. The
 class names are layout artefacts: useful, but only ever accepted alongside a structural check.
@@ -30,7 +31,9 @@ class names are layout artefacts: useful, but only ever accepted alongside a str
 languages; checked in six locales. It picks the label pack.
 
 Generated Fluent class names (`fui-Text`, `fui-Button-…`) appear throughout the page and are never
-matched. Neither is the document title, whose leading count is dynamic.
+matched, with one exception: `fui-Link`, the component name of the redesigned inline link button,
+accepted only together with the position checks. Neither is the document title, whose leading
+count is dynamic.
 
 ## The reply glyph
 
@@ -130,6 +133,25 @@ The one exception is `.qaThreadStarter`. It names exactly one thing, and on some
 action row is rendered outside it, so it counts as a post by itself. Without that, the first post of
 a thread had no `See more`, no recognised translation control, and was missing from copies.
 
+**Replies as speech bubbles (November 2026).** The comment layout draws each reply as a bubble in a
+`.qaThreadReply` beside the starter, both inside one `.qaFeedThread`; nothing is nested in the
+starter. Two diagnostics from a live page: five replies, each with its own action row, four with a
+body wrapper, their translation controls `button.fui-Link` ten anonymous `div`s below the reply.
+Nothing between control and reply carries a name, and `.y-fixedGridColumn` is absent there, so
+climbing from the control reached no post: its "Show translation" was still found by wording and
+compacted, but belonged to no post, so automatic translation never judged the reply's language and
+the known-language hiding never applied. On a reader's page one bubble's control stayed untouched
+for exactly that reason. `.qaThreadReply` is a post container now, accepted like the other classes
+only with an action row inside; with it the same reply was translated.
+
+**`.y-fixedGridColumn` is not always a post.** In the speech-bubble layout the same class wraps
+plain layout columns inside a post: one around the body, one around the action row. Stripping every
+match as a nested reply emptied every copied post of its text, leaving the author lines. The rule
+now (`nestedPosts` in [`src/core/dom.js`](../src/core/dom.js)): a column is a nested post only when
+it holds some of the post's action rows but not all of them -- a reply's own row, never the post's
+only one. And a column wrapping a reply's row does not stand in for the reply: `postContainerFor`
+climbs on to the named container when it holds no further rows.
+
 Where replies are nested inside their parent, consequences that bite:
 
 - "Top-level posts" means containers with no container ancestor — see `rootPosts()`.
@@ -216,11 +238,20 @@ matched by wording.
 
 ## Inline link buttons
 
-Engage draws its small text links as real buttons that only look like links:
+Engage draws its small text links as real buttons that only look like links. Two shapes are known.
+The second arrived in November 2026 for the translation control, a Fluent link with the label as a
+bare text node; "see more" kept the first:
 
 ```html
 <button class="link-…" type="button"><span class="y-fakeLink">see more</span></button>
+<button class="fui-Link ___52mpgl0 f2hkw1w …" type="button">Show translation</button>
 ```
+
+Both are recognised. The hashed classes beside `fui-Link` are build output and ignored; `fui-Link`
+itself is the component's name. A button whose label starts with a digit is a counter, not a link,
+whatever it is styled as. A translation control that is only an icon -- no text, no accessible
+name -- is recognised by position alone and taken to be the untranslated state, since the way
+back always names the source language in brackets.
 
 Where one sits decides what it is, and that held in every interface language checked:
 
@@ -315,8 +346,11 @@ controls, focus support — is something this script must not degrade. Two rules
 ## Diagnostics
 
 *Copy layout diagnostics* reports selector counts, tag names, roles, resolved post counts and box
-metrics. It deliberately carries **no** post text, author names, community names, thread IDs or URL
-parameters, so the output is safe to paste into an issue. Keep it that way if you extend it.
+metrics, a survey of Engage's `qa…` containers, and every link-styled button with its label reduced
+to a shape (`Aaaa aaaaaaaaaaa`), its attribute names, its children and its ancestors. It
+deliberately carries **no** post text, author names, community names, thread IDs or URL parameters,
+so the output is safe to paste into an issue. Keep it that way if you extend it: the label shape is
+as far as it goes, and it was enough to tell a redrawn control from a stray link.
 
 ## Known fragilities
 
@@ -325,7 +359,10 @@ parameters, so the output is safe to paste into an issue. Keep it that way if yo
   label packs still cover the languages they cover.
 - Renaming `span.y-fakeLink` or the body wrapper's class stops the structural recognition of
   `See more` and the translation control. The label packs still cover Engage's languages, so the
-  symptom is a reworded label no longer being found, not a wrong click.
+  symptom is a reworded label no longer being found, not a wrong click. This happened in November
+  2026, when the translation control became `button.fui-Link` with no inner span: English kept
+  working on wording alone while every language without a word list lost the compact translation
+  control. Both shapes are accepted now, for both controls.
 - A layout with neither semantic containers nor `[data-testid="overflow-set"]` yields no posts at
   all, which disables extraction, copying, highlighting and the in-post guard for `See more`.
   Expansion by reply counter would survive. The script warns once on the console when a page

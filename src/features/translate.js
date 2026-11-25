@@ -38,11 +38,12 @@
  */
 import { EVENTS, bus } from '../core/bus.js';
 import {
-  POST_SELECTOR,
   accessibleTexts,
   closestPost,
   debounce,
   isTranslationLinkButton,
+  nestedPosts,
+  normalizeText,
   visibleText,
 } from '../core/dom.js';
 import { detectLanguage } from '../core/language.js';
@@ -125,7 +126,7 @@ export function createTranslateTamer({ matchers, IntersectionObserverImpl = glob
     // The article's own text minus nested replies: a reply in another
     // language must not decide the parent's translate control.
     const clone = article.cloneNode(true);
-    for (const nested of clone.querySelectorAll(POST_SELECTOR)) nested.remove();
+    for (const nested of nestedPosts(clone)) nested.remove();
     clone.querySelectorAll('button, [role="button"], a, time, svg, [aria-hidden="true"]').forEach((node) => node.remove());
     const result = detectLanguage(visibleText(clone));
 
@@ -133,20 +134,30 @@ export function createTranslateTamer({ matchers, IntersectionObserverImpl = glob
     return result;
   }
 
+  /**
+   * A control that shows nothing but an icon: no text, no accessible name,
+   * a drawing inside. Only its position can say what it is.
+   */
+  function isIconOnly(element) {
+    return element.querySelector('svg') !== null && normalizeText(visibleText(element)) === '';
+  }
+
   /** @returns {'translate'|'original'|null} */
   function classify(element) {
     const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH });
-    if (texts.length === 0) return null;
+    if (texts.length === 0 && !isIconOnly(element)) return null;
     if (active.showOriginal && texts.some((text) => active.showOriginal.test(text))) {
       return 'original';
     }
     if (active.translate && texts.some((text) => active.translate.test(text))) {
       return 'translate';
     }
-    // Wording unknown: recognise the control by where it is, and its state by
-    // the source language Engage puts in brackets once a post is translated.
+    // Wording unknown, or no wording at all: recognise the control by where it
+    // is, and its state by the source language Engage puts in brackets once a
+    // post is translated. An icon alone can only be the untranslated state;
+    // the way back always names the language.
     if (isTranslationLinkButton(element)) {
-      return ORIGINAL_STATE.test(texts[0]) ? 'original' : 'translate';
+      return texts.length > 0 && ORIGINAL_STATE.test(texts[0]) ? 'original' : 'translate';
     }
     return null;
   }

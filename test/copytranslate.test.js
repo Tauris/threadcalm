@@ -58,6 +58,8 @@ beforeEach(() => {
   stubLayout(window);
   localStorage.clear();
   settings.load();
+  // These tests compare whole sentences; wrapping is the renderer's concern (thread.test.js).
+  settings.update({ 'copy.wrapAt': 0 });
   document.body.innerHTML = '';
   vi.useFakeTimers();
   tamer = createTranslateTamer({ matchers, IntersectionObserverImpl: undefined });

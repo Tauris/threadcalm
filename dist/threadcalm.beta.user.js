@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Threadcalm (beta)
 // @namespace   https://github.com/Tauris/threadcalm#beta
-// @version     1.3.0.31
+// @version     1.4.0.37
 // @description Expand whole Viva Engage threads automatically, copy them as Markdown, and read them with shortcuts, a reading mode and less clutter.
 // @author      Jörg Türmer
 // @icon        data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%232f6f68%22%2F%3E%3Cg%20transform%3D%22translate(4%204)%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%208h22%22%2F%3E%3Cpath%20d%3D%22M11%2016h16%22%2F%3E%3Cpath%20d%3D%22M17%2024h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E
@@ -28,7 +28,7 @@
 // @grant       GM_registerMenuCommand
 // ==/UserScript==
 /*!
- * Threadcalm (beta) v1.3.0.31
+ * Threadcalm (beta) v1.4.0.37
  * https://github.com/Tauris/threadcalm
  *
  * Copyright (c) 2026 Jörg Türmer. Licensed under the BSD 3-Clause License.
@@ -197,9 +197,11 @@
     return element;
   }
   var ACTION_ROW_SELECTOR = '[data-testid="overflow-set"]';
-  var POST_SELECTOR = '[role="article"], article, .qaThreadStarter, .y-fixedGridColumn';
+  var POST_SELECTOR = '[role="article"], article, .qaThreadStarter, .qaThreadReply, .y-fixedGridColumn';
   var SEMANTIC_POST_SELECTOR = '[role="article"], article';
   var STARTER_SELECTOR = ".qaThreadStarter";
+  var REPLY_SELECTOR = ".qaThreadReply";
+  var NAMED_POST_SELECTOR = `${SEMANTIC_POST_SELECTOR}, ${STARTER_SELECTOR}, ${REPLY_SELECTOR}`;
   function looksLikePost(element) {
     return element.querySelector(ACTION_ROW_SELECTOR) !== null || element.matches(STARTER_SELECTOR);
   }
@@ -215,8 +217,14 @@
     return null;
   }
   var BODY_WRAPPER_SELECTOR = '[class*="contentStateBodyTextWrapper"]';
+  var LEADING_DIGIT = /^\d/;
   function isInlineLinkButton(element) {
-    return element instanceof HTMLButtonElement && element.querySelector(":scope > .y-fakeLink") !== null && !element.hasAttribute("aria-expanded") && !element.hasAttribute("aria-haspopup") && element.closest(ACTION_ROW_SELECTOR) === null;
+    if (!(element instanceof HTMLButtonElement)) return false;
+    if (element.hasAttribute("aria-expanded") || element.hasAttribute("aria-haspopup")) return false;
+    if (element.closest(ACTION_ROW_SELECTOR) !== null) return false;
+    const linkStyled = element.querySelector(":scope > .y-fakeLink") !== null || element.classList.contains("fui-Link");
+    if (!linkStyled) return false;
+    return !LEADING_DIGIT.test(normalizeText(visibleText(element)));
   }
   function ownOf(post, selector) {
     return [...post.querySelectorAll(selector)].filter((element) => closestPost(element) === post);
@@ -233,16 +241,33 @@
     const rows = ownOf(post, ACTION_ROW_SELECTOR);
     return bodies.some((body) => follows(body, element)) && (rows.length === 0 || rows.some((row) => follows(element, row)));
   }
+  function nestedPosts(post) {
+    if (!(post instanceof HTMLElement)) return [];
+    const rows = [...post.querySelectorAll(ACTION_ROW_SELECTOR)];
+    return [...post.querySelectorAll(POST_SELECTOR)].filter((candidate) => {
+      if (candidate.matches(NAMED_POST_SELECTOR)) return true;
+      const inside = rows.filter((row) => candidate.contains(row)).length;
+      return inside > 0 && inside < rows.length;
+    });
+  }
+  var CONTAINER_CLIMB = 12;
   function postContainerFor(actionRow) {
     if (!(actionRow instanceof HTMLElement)) return null;
     let node2 = actionRow.parentElement;
-    let depth = 0;
-    while (node2 && depth < 8) {
-      if (node2.matches(POST_SELECTOR)) return node2;
+    let found = null;
+    for (let depth = 0; node2 && depth < CONTAINER_CLIMB; depth += 1) {
+      if (node2.matches(POST_SELECTOR)) {
+        if (!found) {
+          if (node2.matches(NAMED_POST_SELECTOR)) return node2;
+          found = node2;
+        } else if (node2.matches(NAMED_POST_SELECTOR)) {
+          const rowsInFound = found.querySelectorAll(ACTION_ROW_SELECTOR).length;
+          return node2.querySelectorAll(ACTION_ROW_SELECTOR).length === rowsInFound ? node2 : found;
+        }
+      }
       node2 = node2.parentElement;
-      depth += 1;
     }
-    return actionRow.parentElement;
+    return found ?? actionRow.parentElement;
   }
   function allPosts(root = document) {
     const semantic = [...root.querySelectorAll(SEMANTIC_POST_SELECTOR)].filter(isVisible);
@@ -1024,6 +1049,15 @@
       help: "Copied translations are always marked as such. With this on, the text as its author wrote it follows, so whoever reads the copy can check the translation. Doubles the length of those posts."
     },
     {
+      key: "copy.wrapAt",
+      type: "number",
+      default: 80,
+      min: 0,
+      max: 500,
+      label: "Wrap Markdown lines at (characters)",
+      help: "A paragraph is one long line as Engage renders it. Markdown joins the lines of a paragraph with spaces, so breaking it at this width reads well raw and renders the same. 0 keeps each paragraph on one line, for destinations that turn every line break into a new line, such as GitHub comments or a chat message."
+    },
+    {
       key: "copy.showButtons",
       type: "select",
       default: "hover",
@@ -1518,9 +1552,8 @@
   }
   function extractBody(article) {
     const clone = article.cloneNode(true);
+    for (const nested of nestedPosts(clone)) nested.remove();
     const strip = [
-      POST_SELECTOR,
-      // nested replies, handled separately
       ACTION_ROW_SELECTOR,
       // the whole Like/Comment/Share row in one go
       "button",
@@ -1553,7 +1586,7 @@
     return kept.join("\n");
   }
   function directReplies(article) {
-    const nested = [...article.querySelectorAll(POST_SELECTOR)].filter(isVisible);
+    const nested = nestedPosts(article).filter(isVisible);
     return nested.filter(
       (candidate) => !nested.some((other) => other !== candidate && other.contains(candidate))
     );
@@ -1628,12 +1661,34 @@
     if (!post) return 0;
     return 1 + post.replies.reduce((sum, reply) => sum + countPosts(reply), 0);
   }
+  var LINE_START_SYNTAX = /^(?:[#>|]|[-+*]|[-=_]{3,}|\d{1,9}[.)]|```|~~~)$/;
+  function wrapLine(line, width, prefix = "") {
+    if (!width || width <= 0 || prefix.length + line.length <= width) return [`${prefix}${line}`];
+    const lines = [];
+    let current2 = "";
+    for (const word of line.split(" ")) {
+      if (!current2) {
+        current2 = word;
+        continue;
+      }
+      const fits = prefix.length + current2.length + 1 + word.length <= width;
+      if (fits || LINE_START_SYNTAX.test(word)) {
+        current2 += ` ${word}`;
+      } else {
+        lines.push(`${prefix}${current2}`);
+        current2 = word;
+      }
+    }
+    if (current2) lines.push(`${prefix}${current2}`);
+    return lines;
+  }
   function renderThread(post, options = {}) {
     const {
       format = "markdown",
       includeTimestamps = true,
       includePermalink = true,
       includeOriginal = false,
+      wrapAt = 0,
       sourceUrl = location.href
     } = options;
     const lines = [];
@@ -1654,19 +1709,23 @@
           return;
         }
         lines.push(`${prefix}*Original:*`, prefix.trimEnd());
-        for (const line of entry.translation.original.split("\n")) lines.push(`${prefix}${line}`);
+        paragraphs(entry.translation.original, prefix);
         lines.push(prefix.trimEnd());
       };
+      const paragraphs = (body, prefix) => {
+        for (const line of body.split("\n")) lines.push(...wrapLine(line, wrapAt, prefix));
+      };
       lines.push(`## ${post.author}${stamp(post)}`, "");
-      if (post.body) lines.push(post.body, "");
+      if (post.body) {
+        paragraphs(post.body, "");
+        lines.push("");
+      }
       translation(post, "");
       const walk = (entry, depth) => {
         const prefix = "> ".repeat(depth);
         lines.push(`${prefix}**${entry.author}**${stamp(entry)}`);
         lines.push(prefix.trimEnd());
-        for (const line of entry.body.split("\n")) {
-          lines.push(`${prefix}${line}`);
-        }
+        paragraphs(entry.body, prefix);
         lines.push(prefix.trimEnd());
         translation(entry, prefix);
         for (const child of entry.replies) walk(child, depth + 1);
@@ -1756,7 +1815,8 @@
         format: get("copy.format"),
         includeTimestamps: get("copy.includeTimestamps"),
         includePermalink: get("copy.includePermalink"),
-        includeOriginal: get("copy.includeOriginal")
+        includeOriginal: get("copy.includeOriginal"),
+        wrapAt: get("copy.wrapAt")
       };
     }
     async function translateFirst(members, article) {
@@ -1964,7 +2024,7 @@
   // src/features/expand.js
   var CANDIDATE_SELECTOR = 'button, [role="button"], a, [tabindex="0"], span, div[role="link"]';
   var MAX_LABEL_LENGTH2 = 120;
-  var LEADING_DIGIT = new RegExp("^\\p{Nd}", "u");
+  var LEADING_DIGIT2 = new RegExp("^\\p{Nd}", "u");
   var OPEN_DWELL_MS = 300;
   function createExpander({ matchers, IntersectionObserverImpl = globalThis.IntersectionObserver }) {
     let active = matchers;
@@ -2009,7 +2069,7 @@
       if (element.tagName !== "BUTTON") return false;
       const label = normalizeText(visibleText(element));
       if (!label || label.length > MAX_LABEL_LENGTH2) return false;
-      if (!LEADING_DIGIT.test(label)) return false;
+      if (!LEADING_DIGIT2.test(label)) return false;
       return hasIconSignature(element, get("advanced.replyIconSignatures"));
     }
     function classify(element) {
@@ -2309,7 +2369,7 @@
       setValue(STORAGE_KEY2, trimmed);
     }
     function hasReplies(article) {
-      if (article.querySelector(POST_SELECTOR)) return true;
+      if (nestedPosts(article).length > 0) return true;
       if (!active.replyCount) return false;
       for (const element of article.querySelectorAll('span, button, a, [role="button"]')) {
         for (const text of accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH3 })) {
@@ -2380,6 +2440,212 @@
     };
   }
 
+  // src/features/linkreport.js
+  var LINK_BUTTON_SELECTOR = "button.fui-Link, button > .y-fakeLink";
+  var MAX_DESCRIBED = 12;
+  var MAX_DEPTH = 10;
+  var MARKER_DEPTH = 40;
+  var QA_CLASS = /^qa[A-Z]/;
+  var KEPT_CLASS = /^(?:qa[A-Z]|y-|fui-[A-Z]|tc-)/;
+  var MAX_LABEL_LENGTH4 = 40;
+  function sketch(node2) {
+    if (!node2 || node2.nodeType !== 1) return "?";
+    let text = node2.tagName.toLowerCase();
+    const classes = [...node2.classList].filter((name) => KEPT_CLASS.test(name)).map((name) => name.replace(/-\d+$/, "-N"));
+    if (node2.matches(BODY_WRAPPER_SELECTOR)) classes.push("contentStateBodyTextWrapper-N");
+    if (classes.length) text += `.${classes.join(".")}`;
+    const role = node2.getAttribute("role");
+    if (role) text += `[role=${role}]`;
+    const testId = node2.getAttribute("data-testid");
+    if (testId) text += `[data-testid=${testId}]`;
+    for (const attribute of ["aria-expanded", "aria-haspopup", "aria-hidden", "hidden", "disabled"]) {
+      if (node2.hasAttribute(attribute)) text += `[${attribute}]`;
+    }
+    return text;
+  }
+  function ancestry(node2, { depth = MAX_DEPTH, root = document } = {}) {
+    const parts = [];
+    let current2 = node2.parentElement;
+    for (let level = 0; current2 && level < depth; level += 1) {
+      let part = sketch(current2);
+      if (current2.matches('[role="article"], article, .qaThreadStarter, .y-fixedGridColumn')) {
+        part += closestPost(current2) === current2 ? "[post]" : "[post-class, not a post]";
+      }
+      if (current2 === root.body || current2 === root.documentElement) part += "[root]";
+      parts.push(`${part}{${current2.children.length}}`);
+      current2 = current2.parentElement;
+    }
+    return parts.join(" < ");
+  }
+  function nearestMarker(node2) {
+    let current2 = node2.parentElement;
+    for (let level = 1; current2 && level <= MARKER_DEPTH; level += 1) {
+      const named = [...current2.classList].some((name) => QA_CLASS.test(name)) || current2.matches('[role="article"], article, [data-testid]');
+      if (named) return `${sketch(current2)} (${level} up)`;
+      current2 = current2.parentElement;
+    }
+    return "none";
+  }
+  function labelShape(label) {
+    return label.replace(/[\p{L}\p{N}]/gu, (character) => {
+      if (new RegExp("\\p{N}", "u").test(character)) return "9";
+      return new RegExp("\\p{Lu}", "u").test(character) ? "A" : "a";
+    });
+  }
+  function attributeNames(element) {
+    return [...element.attributes].map((attribute) => attribute.name).filter((name) => name !== "class" && name !== "style").join(",");
+  }
+  function childSketches(element) {
+    const children = [...element.children].slice(0, 4).map((child) => `${sketch(child)}{${child.children.length}}`);
+    if (element.children.length > 4) children.push(`+${element.children.length - 4}`);
+    return children.length ? children.join(", ") : "(text only)";
+  }
+  function buttonOf(element) {
+    return element.tagName === "BUTTON" ? element : element.parentElement;
+  }
+  function wordingOf(texts, matchers) {
+    if (!matchers || texts.length === 0) return "none";
+    const families = [
+      ["original", matchers.showOriginal],
+      ["translate", matchers.translate],
+      ["see more", matchers.expandText],
+      ["counter", matchers.replyCount],
+      ["pagination", matchers.expandReplies],
+      ["menu", matchers.menu]
+    ];
+    for (const [name, pattern] of families) {
+      if (pattern && texts.some((text) => pattern.test(text))) return name;
+    }
+    return "none";
+  }
+  function markerOf(button) {
+    const parts = [];
+    if (button.dataset.tcTranslate) parts.push(button.dataset.tcTranslate);
+    if (button.classList.contains("tc-translate-compact")) parts.push("[compacted]");
+    if (button.classList.contains("tc-translate-hidden")) parts.push("[hidden]");
+    return parts.length ? parts.join(" ") : "none";
+  }
+  function describeLinkButton(button, { matchers, root = document } = {}) {
+    const shape = [
+      button.classList.contains("fui-Link") ? "fui-Link" : "",
+      button.querySelector(":scope > .y-fakeLink") ? "y-fakeLink" : ""
+    ].filter(Boolean).join("+") || "plain";
+    const label = normalizeText(visibleText(button));
+    const texts = accessibleTexts(button, { maxLength: MAX_LABEL_LENGTH4 });
+    const named = [...button.attributes].map((attribute) => attribute.name).filter((name) => name === "aria-label" || name === "title");
+    const wording = wordingOf(texts, matchers);
+    const post = closestPost(button);
+    const inBody = button.closest(BODY_WRAPPER_SELECTOR) !== null;
+    const inRow = button.closest(ACTION_ROW_SELECTOR) !== null;
+    const byPosition = isBodyLinkButton(button) ? "see more" : isTranslationLinkButton(button) ? "translation control" : "none";
+    const verdict = wording !== "none" || byPosition !== "none" ? "recognised" : "NOT RECOGNISED";
+    const facts = [
+      `label=${label.length} chars${/\(\s*[^()]*\)\s*$/.test(label) ? " (brackets)" : ""}${button.querySelector("svg") ? " +svg" : ""}${named.length ? ` named-by=${named.join(",")}` : ""}`,
+      `wording=${wording}`,
+      `position=${byPosition}`,
+      `marker=${markerOf(button)}`,
+      `post=${post ? sketch(post) : "none"}`,
+      `in-body=${inBody ? "yes" : "no"}`,
+      `in-action-row=${inRow ? "yes" : "no"}`,
+      `shadow=${button.getRootNode() !== root ? "yes" : "no"}`,
+      `nearest-marker=${nearestMarker(button)}`
+    ];
+    if (post) {
+      const own = (selector) => [...post.querySelectorAll(selector)].filter((node2) => closestPost(node2) === post);
+      const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const bodies = own(BODY_WRAPPER_SELECTOR);
+      const rows = own(ACTION_ROW_SELECTOR);
+      facts.push(
+        `post-bodies=${bodies.length}${bodies.some((body) => follows(body, button)) ? " (one before this)" : ""}`,
+        `post-rows=${rows.length}${rows.some((row) => follows(button, row)) ? " (one after this)" : ""}`
+      );
+    }
+    return {
+      verdict,
+      lines: [
+        `${sketch(button)}  shape=${shape}  ${verdict}`,
+        `    ${facts.join("  ")}`,
+        `    label-shape="${labelShape(label)}"  attrs=${attributeNames(button) || "(none)"}  children: ${childSketches(button)}`,
+        `    ancestors: ${ancestry(button, { root })}`
+      ]
+    };
+  }
+  function linkButtonLines({ matchers, deepQueryAll, root = document } = {}) {
+    const query = deepQueryAll ?? ((selector) => [...root.querySelectorAll(selector)]);
+    const buttons = [...new Set(query(LINK_BUTTON_SELECTOR).map(buttonOf).filter(Boolean))];
+    const inShadow = buttons.filter((button) => button.getRootNode() !== root).length;
+    const described = buttons.map((button) => describeLinkButton(button, { matchers, root }));
+    const missed = described.filter((entry) => entry.verdict !== "recognised");
+    const found = described.filter((entry) => entry.verdict === "recognised");
+    const lines = [
+      `link buttons (fui-Link or y-fakeLink): ${buttons.length} found, ${missed.length} not recognised${inShadow ? `, ${inShadow} inside shadow roots` : ""}`
+    ];
+    if (buttons.length === 0) return lines;
+    const shown = [...missed, ...found].slice(0, MAX_DESCRIBED);
+    shown.forEach((entry, index) => {
+      lines.push(`  #${index + 1} ${entry.lines[0]}`);
+      lines.push(...entry.lines.slice(1).map((line) => `  ${line}`));
+    });
+    if (described.length > shown.length) {
+      lines.push(`  … and ${described.length - shown.length} more, all recognised`);
+    }
+    return lines;
+  }
+  function containerSurveyLines({ deepQueryAll, root = document } = {}) {
+    const query = deepQueryAll ?? ((selector) => [...root.querySelectorAll(selector)]);
+    const byClass = /* @__PURE__ */ new Map();
+    for (const element of query('[class*="qa"]')) {
+      for (const name of element.classList) {
+        if (!QA_CLASS.test(name)) continue;
+        if (!byClass.has(name)) byClass.set(name, []);
+        byClass.get(name).push(element);
+      }
+    }
+    const lines = [`named containers (qa… classes): ${byClass.size}`];
+    const names = [...byClass.keys()].sort();
+    for (const name of names) {
+      const elements = byClass.get(name);
+      const count = (predicate) => elements.filter(predicate).length;
+      const has = (selector) => (element) => element.querySelector(selector) !== null;
+      const facts = [
+        `post=${count((element) => closestPost(element) === element)}`,
+        `inside-post=${count((element) => {
+          const post = closestPost(element);
+          return post !== null && post !== element;
+        })}`,
+        `with-action-row=${count(has(ACTION_ROW_SELECTOR))}`,
+        `with-body-wrapper=${count(has(BODY_WRAPPER_SELECTOR))}`,
+        `with-link-buttons=${count(has(LINK_BUTTON_SELECTOR))}`,
+        `with-nested-${name}=${count(has(`.${name}`))}`
+      ];
+      lines.push(`  ${name}: ${elements.length}  ${facts.join("  ")}`);
+    }
+    return lines;
+  }
+  function memberLine(index, member) {
+    const extracted = extractPost(member);
+    const nested = nestedPosts(member);
+    const columns = member.querySelectorAll(POST_SELECTOR).length - nested.length;
+    const body = extracted?.body ?? "";
+    const lines = body ? body.split("\n").length : 0;
+    return `  #${index} ${sketch(member)}  author=${extracted?.author.length ?? 0} chars  body=${body.length} chars/${lines} lines  replies=${extracted?.replies.length ?? 0}  nested-posts=${nested.length}  layout-columns=${columns}  rows=${member.querySelectorAll(ACTION_ROW_SELECTOR).length}${extracted ? "" : "  (yields nothing)"}`;
+  }
+  function copyDryRunLines({ root = document } = {}) {
+    const first = rootPosts(root)[0];
+    if (!first) return ["copy dry run: no post on the page"];
+    const members = threadMembers(first);
+    const lines = [
+      `copy dry run (first thread on the page): ${members ? `${members.length} sibling members` : "nested layout, one container"}`
+    ];
+    const list = members ?? [first];
+    list.slice(0, 12).forEach((member, index) => lines.push(memberLine(index + 1, member)));
+    if (list.length > 12) lines.push(`  … and ${list.length - 12} more`);
+    const tree = members ? extractThread(members) : extractPost(first);
+    const total = (post) => post ? post.body.length + post.replies.reduce((sum, reply) => sum + total(reply), 0) : 0;
+    lines.push(`  rendered: ${countPosts(tree)} posts, ${total(tree)} body chars in all`);
+    return lines;
+  }
+
   // src/features/quiet.js
   var POST_CLASS = "tc-quiet-post";
   var COMPOSER_CLASS = "tc-quiet-composer";
@@ -2413,7 +2679,7 @@
   var OPENER_SELECTOR = 'button, [role="button"]';
   var COMPOSER_SELECTOR = `${EDITOR_SELECTOR}, ${OPENER_SELECTOR}`;
   var COMPOSER_WRAPPER_SELECTOR = 'form, [role="form"], [data-testid="focus-catcher-wrapper"]';
-  var MAX_LABEL_LENGTH4 = 40;
+  var MAX_LABEL_LENGTH5 = 40;
   var MAX_LONE_ANCESTORS = 2;
   function loneAncestors(element) {
     const found = [];
@@ -2451,7 +2717,7 @@
       if (get("quiet.composer")) {
         const wrappers = /* @__PURE__ */ new Map();
         for (const element of root.querySelectorAll(COMPOSER_SELECTOR)) {
-          const names = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH4 });
+          const names = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH5 });
           if (!names.some((name) => COMPOSER_LABELS.some((pattern) => pattern.test(name)))) {
             continue;
           }
@@ -2879,7 +3145,7 @@
   var ROW_CLASS = "tc-translate-row";
   var ROW_HIDDEN_CLASS = "tc-translate-row-hidden";
   var MARKER = "tcTranslate";
-  var MAX_LABEL_LENGTH5 = 40;
+  var MAX_LABEL_LENGTH6 = 40;
   var TRANSLATE_DWELL_MS = 500;
   var TRANSLATE_SPACING_MS = 400;
   var TRANSLATE_TIMEOUT_MS = 8e3;
@@ -2906,15 +3172,18 @@
       const cached = languageCache.get(article);
       if (cached) return cached;
       const clone = article.cloneNode(true);
-      for (const nested of clone.querySelectorAll(POST_SELECTOR)) nested.remove();
+      for (const nested of nestedPosts(clone)) nested.remove();
       clone.querySelectorAll('button, [role="button"], a, time, svg, [aria-hidden="true"]').forEach((node2) => node2.remove());
       const result = detectLanguage(visibleText(clone));
       languageCache.set(article, result);
       return result;
     }
+    function isIconOnly(element) {
+      return element.querySelector("svg") !== null && normalizeText(visibleText(element)) === "";
+    }
     function classify(element) {
-      const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH5 });
-      if (texts.length === 0) return null;
+      const texts = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH6 });
+      if (texts.length === 0 && !isIconOnly(element)) return null;
       if (active.showOriginal && texts.some((text) => active.showOriginal.test(text))) {
         return "original";
       }
@@ -2922,7 +3191,7 @@
         return "translate";
       }
       if (isTranslationLinkButton(element)) {
-        return ORIGINAL_STATE.test(texts[0]) ? "original" : "translate";
+        return texts.length > 0 && ORIGINAL_STATE.test(texts[0]) ? "original" : "translate";
       }
       return null;
     }
@@ -3016,7 +3285,7 @@
       if (!(post instanceof HTMLElement)) return null;
       const [control] = controlsOf(post, "original");
       if (!control) return null;
-      const texts = accessibleTexts(control, { maxLength: MAX_LABEL_LENGTH5 });
+      const texts = accessibleTexts(control, { maxLength: MAX_LABEL_LENGTH6 });
       const label = texts.find((text) => active.showOriginal?.test(text)) ?? texts.find((text) => ORIGINAL_STATE.test(text));
       const from = /\(([^()]*)\)\s*$/.exec(label ?? "")?.[1]?.trim() || null;
       return { from, original: originals.get(post) ?? null };
@@ -3119,7 +3388,7 @@
         host.classList.toggle(ROW_HIDDEN_CLASS, hidden);
       }
       if (compact && !hidden && !element.hasAttribute("data-tc-title")) {
-        const label = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH5 })[0];
+        const label = accessibleTexts(element, { maxLength: MAX_LABEL_LENGTH6 })[0];
         if (label) element.setAttribute("data-tc-title", label);
         if (!element.getAttribute("title") && label) element.setAttribute("title", label);
       }
@@ -6246,9 +6515,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
   }
 
   // src/main.js
-  var VERSION = true ? "1.3.0.31" : "0.0.0-dev";
+  var VERSION = true ? "1.4.0.37" : "0.0.0-dev";
   var CHANNEL = true ? "beta" : "dev";
-  var BUILD = true ? "5b75faf" : "dev";
+  var BUILD = true ? "0f66112" : "dev";
   var MATCHER_KEYS = [
     "general.languages",
     "advanced.extraExpandReplies",
@@ -6328,7 +6597,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     bus.on(EVENTS.NAVIGATE, (payload) => dispatch("onNavigate", payload));
     bus.on(EVENTS.DOM_CHANGED, () => dispatch("onDomChanged"));
     bus.on(EVENTS.COPY_DIAGNOSTICS, () => {
-      copyDiagnostics();
+      copyDiagnostics({ matchers: () => matchers, videoRecorder });
     });
     bus.on(EVENTS.COPY_VIDEO_REPORT, () => {
       copyVideoReport({ videoRecorder, videoGuard });
@@ -6343,7 +6612,16 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     for (const feature of features) feature.start?.();
     noticeUnsupportedLanguage();
     startSpaWatcher();
-    registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard });
+    registerMenuCommands({
+      expander,
+      panel,
+      shortcuts,
+      copyTools,
+      readingMode,
+      videoRecorder,
+      videoGuard,
+      matchers: () => matchers
+    });
     log.info(`v${VERSION} (${CHANNEL} ${BUILD}) ready on ${location.host}`);
     setTimeout(() => {
       if (rootPosts().length === 0 && document.querySelector('[role="main"]')) {
@@ -6353,7 +6631,16 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       }
     }, 5e3);
   }
-  function registerMenuCommands({ expander, panel, shortcuts, copyTools, readingMode, videoRecorder, videoGuard }) {
+  function registerMenuCommands({
+    expander,
+    panel,
+    shortcuts,
+    copyTools,
+    readingMode,
+    videoRecorder,
+    videoGuard,
+    matchers
+  }) {
     registerMenuCommand("Settings…", () => panel.openSettings());
     registerMenuCommand("Keyboard shortcuts…", () => shortcuts.showHelp());
     registerMenuCommand("Pause / resume automatic expansion", () => {
@@ -6372,7 +6659,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
       bus.emit(EVENTS.TOAST, { message: on ? "Reading mode on" : "Reading mode off" });
     });
     registerMenuCommand("Show the Threadcalm panel", () => panel.show());
-    registerMenuCommand("Copy layout diagnostics (for bug reports)", copyDiagnostics);
+    registerMenuCommand("Copy layout diagnostics (for bug reports)", () => copyDiagnostics({ matchers, videoRecorder }));
     registerMenuCommand("Copy video report (for bug reports)", () => copyVideoReport({ videoRecorder, videoGuard }));
   }
   var HEALTH_SELECTORS = [
@@ -6382,6 +6669,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     ['[role="article"], article', "semantic posts"],
     [".qaThreadStarter", "thread starter"],
     [".y-fixedGridColumn", "comment containers"],
+    [".qaThreadReply", "replies (speech bubbles)"],
     ['[data-testid="overflow-set"]', "action rows"],
     [".tc-quiet-post", "posts tagged by Threadcalm"],
     [".tc-translate-compact, .tc-translate-hidden", "translate controls handled"],
@@ -6424,7 +6712,7 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     });
     if (!copied) log.info(report);
   }
-  async function copyDiagnostics() {
+  async function copyDiagnostics({ matchers, videoRecorder }) {
     const control = document.querySelector(".tc-translate-compact, .tc-translate-hidden") ?? document.querySelector("[data-tc-title]");
     const lines = [
       `Threadcalm ${VERSION} (${CHANNEL} ${BUILD})`,
@@ -6450,6 +6738,9 @@ html.tc-no-banner [role="banner"] { display: none !important; }
     );
     lines.push("", `posts resolved: ${rootPosts().length}`);
     lines.push(...activityLines(), "");
+    lines.push(...containerSurveyLines({ deepQueryAll: videoRecorder.deepQueryAll }), "");
+    lines.push(...copyDryRunLines(), "");
+    lines.push(...linkButtonLines({ matchers: matchers(), deepQueryAll: videoRecorder.deepQueryAll }), "");
     if (!control) {
       lines.push("No translate control found on this page.");
     } else {

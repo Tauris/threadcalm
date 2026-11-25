@@ -158,12 +158,18 @@ export const ACTION_ROW_SELECTOR = '[data-testid="overflow-set"]';
  *
  * `[role="article"]` is listed first because it is semantic and would survive
  * a redesign, but it must not be relied on alone: layouts exist that use it
- * nowhere on the page. The two `qa`/`y` classes are layout artefacts, so they
- * are only ever accepted together with a structural check (see
- * `looksLikePost`).
+ * nowhere on the page. The `qa`/`y` classes are layout artefacts, so they are
+ * only ever accepted together with a structural check (see `looksLikePost`).
+ *
+ * `.qaThreadReply` is the reply of the comment layout of late 2026, drawn as
+ * a speech bubble beside the starter rather than nested in it. It holds its
+ * own action row, body wrapper and translation control, but none of the other
+ * names, so without it a reply resolved to whatever small element happened to
+ * wrap its action row: its translation control then belonged to no post, and
+ * automatic translation could not judge its language.
  */
 export const POST_SELECTOR =
-  '[role="article"], article, .qaThreadStarter, .y-fixedGridColumn';
+  '[role="article"], article, .qaThreadStarter, .qaThreadReply, .y-fixedGridColumn';
 
 /** Semantic containers, which need no corroboration. */
 const SEMANTIC_POST_SELECTOR = '[role="article"], article';
@@ -176,6 +182,12 @@ const SEMANTIC_POST_SELECTOR = '[role="article"], article';
  * "see more", the translation controls and copying.
  */
 export const STARTER_SELECTOR = '.qaThreadStarter';
+
+/** A reply of the speech-bubble layout; a post only with an action row inside. */
+export const REPLY_SELECTOR = '.qaThreadReply';
+
+/** Containers Engage names as posts, as opposed to `.y-fixedGridColumn`, which it also uses for layout. */
+const NAMED_POST_SELECTOR = `${SEMANTIC_POST_SELECTOR}, ${STARTER_SELECTOR}, ${REPLY_SELECTOR}`;
 
 /**
  * A class-matched candidate counts as a post only if it owns an action row --
@@ -208,20 +220,35 @@ export const BODY_WRAPPER_SELECTOR = '[class*="contentStateBodyTextWrapper"]';
 
 /**
  * Engage's inline text link: a real <button> whose only job is to look like a
- * link, by wrapping a `span.y-fakeLink`. "see more", "Show translation" and
- * "Show original (…)" are all built this way, in every interface language.
- * A control that opens something (`aria-expanded`, `aria-haspopup`) is not
- * one of them -- the collapsed "Write a comment" box is also a link-styled
- * button, and carries `aria-expanded`.
+ * link. "see more", "Show translation" and "Show original (…)" are all built
+ * this way, in every interface language, and two shapes of it are known:
+ *
+ *   - the original wraps its label in a `span.y-fakeLink`; "see more" is still
+ *     built so;
+ *   - since November 2026 the translation control is a Fluent link,
+ *     `button.fui-Link`, with the label as a bare text node and no inner span.
+ *
+ * `fui-Link` is the one Fluent class accepted anywhere in the script. Unlike
+ * the hashed classes beside it (`f2hkw1w`, `f1k6fduh`…), which are build
+ * output, it is the component's own name and changes with the library, not
+ * with the build. It is still only ever accepted together with the position
+ * checks below.
+ *
+ * A control that opens something (`aria-expanded`, `aria-haspopup`) is not one
+ * of them -- the collapsed "Write a comment" box is also a link-styled button,
+ * and carries `aria-expanded`. Nor is a counter: a label that starts with a
+ * digit is "3 replies", however it is styled.
  */
+const LEADING_DIGIT = /^\d/;
+
 function isInlineLinkButton(element) {
-  return (
-    element instanceof HTMLButtonElement &&
-    element.querySelector(':scope > .y-fakeLink') !== null &&
-    !element.hasAttribute('aria-expanded') &&
-    !element.hasAttribute('aria-haspopup') &&
-    element.closest(ACTION_ROW_SELECTOR) === null
-  );
+  if (!(element instanceof HTMLButtonElement)) return false;
+  if (element.hasAttribute('aria-expanded') || element.hasAttribute('aria-haspopup')) return false;
+  if (element.closest(ACTION_ROW_SELECTOR) !== null) return false;
+  const linkStyled =
+    element.querySelector(':scope > .y-fakeLink') !== null || element.classList.contains('fui-Link');
+  if (!linkStyled) return false;
+  return !LEADING_DIGIT.test(normalizeText(visibleText(element)));
 }
 
 /** The post's own elements matching `selector`, not those of nested replies. */
@@ -248,7 +275,9 @@ export function isBodyLinkButton(element) {
  * A post's "Show translation" or "Show original (…)", recognised without
  * reading it: an inline link button below the post's body and above its
  * action row, outside the body itself. Observed so in English, Japanese and
- * Portuguese, on feed and conversation posts alike.
+ * Portuguese, on feed and conversation posts alike, and in both shapes of
+ * the link button. The control may carry no label at all -- an icon --
+ * and is still recognised here.
  */
 export function isTranslationLinkButton(element) {
   if (!isInlineLinkButton(element) || element.closest(BODY_WRAPPER_SELECTOR)) return false;
@@ -265,22 +294,60 @@ export function isTranslationLinkButton(element) {
 }
 
 /**
+ * The posts nested inside a post: replies in the layout that nests them, and
+ * nothing in the layout that does not.
+ *
+ * `.y-fixedGridColumn` is the catch: Engage uses it both for a nested reply
+ * and, in the speech-bubble layout of late 2026, for plain layout columns
+ * inside a post -- one around the body, one around the action row. Taking
+ * every match for a nested reply there stripped the body out of every copied
+ * post and left the author lines standing alone. So a column counts as a
+ * nested post only when it owns an action row the post does not need for
+ * itself: some of the post's rows inside it, but not all of them. Containers
+ * Engage names as posts count regardless.
+ */
+export function nestedPosts(post) {
+  if (!(post instanceof HTMLElement)) return [];
+  const rows = [...post.querySelectorAll(ACTION_ROW_SELECTOR)];
+  return [...post.querySelectorAll(POST_SELECTOR)].filter((candidate) => {
+    if (candidate.matches(NAMED_POST_SELECTOR)) return true;
+    const inside = rows.filter((row) => candidate.contains(row)).length;
+    return inside > 0 && inside < rows.length;
+  });
+}
+
+/** How far above its action row a post's container may sit. */
+const CONTAINER_CLIMB = 12;
+
+/**
  * The post that owns a given action row.
  *
- * Climbs to the nearest recognised container, and falls back to the row's
- * parent so that an unrecognised layout still yields *something* postlike
- * rather than nothing at all.
+ * Climbs to the nearest recognised container. When that is an anonymous
+ * column, the climb goes on to a container Engage names, as long as it holds
+ * no action rows beyond the column's own: in the speech-bubble layout the
+ * reply's row sits in a column inside the `.qaThreadReply`, and the reply, not
+ * the column, is the post -- the column has no body in it. In the layout that
+ * nests replies, the starter above a reply's column holds its own row too, so
+ * the column stays the post. Falls back to the row's parent so that an
+ * unrecognised layout still yields *something* postlike rather than nothing.
  */
 export function postContainerFor(actionRow) {
   if (!(actionRow instanceof HTMLElement)) return null;
   let node = actionRow.parentElement;
-  let depth = 0;
-  while (node && depth < 8) {
-    if (node.matches(POST_SELECTOR)) return node;
+  let found = null;
+  for (let depth = 0; node && depth < CONTAINER_CLIMB; depth += 1) {
+    if (node.matches(POST_SELECTOR)) {
+      if (!found) {
+        if (node.matches(NAMED_POST_SELECTOR)) return node;
+        found = node;
+      } else if (node.matches(NAMED_POST_SELECTOR)) {
+        const rowsInFound = found.querySelectorAll(ACTION_ROW_SELECTOR).length;
+        return node.querySelectorAll(ACTION_ROW_SELECTOR).length === rowsInFound ? node : found;
+      }
+    }
     node = node.parentElement;
-    depth += 1;
   }
-  return actionRow.parentElement;
+  return found ?? actionRow.parentElement;
 }
 
 /**
